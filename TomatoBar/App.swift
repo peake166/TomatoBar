@@ -14,6 +14,10 @@ struct TBApp: App {
     @NSApplicationDelegateAdaptor(TBStatusItem.self) var appDelegate
 
     init() {
+        // 强制设置应用程序使用中文
+        UserDefaults.standard.set(["zh-Hans"], forKey: "AppleLanguages")
+        UserDefaults.standard.synchronize()
+        
         TBStatusItem.shared = appDelegate
         logger.append(event: TBLogEventAppStart())
     }

@@ -25,3 +25,16 @@
 "TBTimer.onRestStart.skip.title" = "跳过";
 "TBTimer.onRestFinish.title" = "休息结束";
 "TBTimer.onRestFinish.body" = "继续努力!";
+
+/* 以下是添加的时间块相关通知文本 */
+"TimeBlock.started.title" = "时间块开始";
+"TimeBlock.started.body" = "时间块 %@ 已开始";
+"TimeBlock.paused.title" = "时间块暂停";
+"TimeBlock.paused.body" = "时间块 %@ 已暂停";
+"TimeBlock.finished.title" = "时间块结束";
+"TimeBlock.finished.body" = "时间块 %@ 已结束";
+"TimeBlock.reminder.title" = "%@ 的提醒";
+"TimeBlock.reminder.dismiss" = "忽略";
+"TimeBlock.pause.title" = "暂停";
+"TimeBlock.resume.title" = "继续";
+"TimeBlock.skip.title" = "跳过";
