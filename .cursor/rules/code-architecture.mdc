@@ -1,0 +1,74 @@
+---
+description: 
+globs: 
+alwaysApply: false
+---
+# TomatoBar代码架构
+
+## 整体架构
+
+TomatoBar采用了模块化的架构设计，主要由以下核心组件组成：
+
+1. **应用入口和状态栏管理** - App.swift
+2. **状态机** - State.swift
+3. **计时器逻辑** - Timer.swift
+4. **用户界面** - View.swift
+5. **通知管理** - Notifications.swift
+6. **音频播放** - Player.swift
+7. **日志记录** - Log.swift
+
+## 设计模式
+
+### 状态机模式
+番茄钟的核心逻辑使用状态机模式实现，定义在 [TomatoBar/State.swift](mdc:TomatoBar/State.swift) 中：
+
+- **工作状态** (Work)
+- **短休息状态** (ShortRest)
+- **长休息状态** (LongRest)
+- **空闲状态** (Idle)
+
+状态转换通过定义的事件触发，包括：开始工作、停止计时器、完成工作等。
+
+### 观察者模式
+TomatoBar使用SwiftUI的状态管理和绑定机制，实现了观察者模式：
+
+- **@Published** 属性发布状态变化
+- **@State** 和 **@Binding** 用于UI组件和数据的双向绑定
+- 状态变化自动触发UI更新
+
+### 命令模式
+菜单项和快捷键操作通过命令模式实现：
+
+- 每个操作（开始/停止/跳过）被封装为独立的函数
+- 这些函数被菜单项和快捷键触发
+
+### 单例模式
+部分核心服务采用单例模式：
+
+- 日志服务
+- 通知中心
+- 计时器管理
+
+## 文件交互关系
+
+- **App.swift** → 创建并初始化 **TBStatusItem** 和 **TBTimer**
+- **Timer.swift** → 使用 **TBStateMachine** 管理状态
+- **Timer.swift** → 调用 **TBPlayer** 播放声音
+- **Timer.swift** → 调用 **TBNotificationCenter** 发送通知
+- **View.swift** → 与 **TBTimer** 和 **TBPlayer** 交互
+
+## 关键数据流
+
+1. 用户点击菜单栏或使用快捷键
+2. 触发 **TBTimer** 中的状态转换
+3. 状态转换引起 UI 更新、声音播放和通知发送
+4. 计时结束后自动触发下一个状态转换
+
+## 扩展点
+
+TomatoBar的代码设计提供了几个可扩展点：
+
+1. 添加新的状态到状态机
+2. 扩展设置界面添加新的配置选项
+3. 通过URL Scheme扩展应用集成能力
+4. 增强日志记录功能以支持更多分析

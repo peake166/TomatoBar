@@ -14,32 +14,31 @@
   align="right"
 />
 
-## Overview
-Have you ever heard of Pomodoro? It’s a great technique to help you keep track of time and stay on task during your studies or work. Read more about it on <a href="https://en.wikipedia.org/wiki/Pomodoro_Technique">Wikipedia</a>.
+## 概述
+你听说过番茄工作法吗？这是一种很棒的技术，可以帮助你在学习或工作期间跟踪时间并保持专注。在<a href="https://en.wikipedia.org/wiki/Pomodoro_Technique">维基百科</a>上阅读更多相关信息。
 
-TomatoBar is world's neatest Pomodoro timer for the macOS menu bar. All the essential features are here - configurable
-work and rest intervals, optional sounds, discreet actionable notifications, global hotkey.
+TomatoBar是macOS菜单栏上最简洁的番茄钟计时器。它包含所有基本功能 - 可配置的工作和休息间隔、可选声音提示、谨慎的可操作通知以及全局快捷键。
 
-TomatoBar is fully sandboxed with no entitlements.
+TomatoBar完全沙盒化，不需要任何特殊权限。
 
-Download the latest release <a href="https://github.com/ivoronin/TomatoBar/releases/latest/">here</a> or install using Homebrew:
+在<a href="https://github.com/ivoronin/TomatoBar/releases/latest/">这里</a>下载最新版本，或使用Homebrew安装：
 ```
 $ brew install --cask tomatobar
 ```
 
-If the app doesn't start, install using the `--no-quarantine` flag:
+如果应用无法启动，请使用`--no-quarantine`标志安装：
 ```
 $ brew install --cask --no-quarantine tomatobar
 ```
 
-## Integration with other tools
-### Event log
-TomatoBar logs state transitions in JSON format to `~/Library/Containers/com.github.ivoronin.TomatoBar/Data/Library/Caches/TomatoBar.log`. Use this data to analyze your productivity and enrich other data sources.
-### Starting and stopping the timer
-TomatoBar can be controlled using `tomatobar://` URLs. To start or stop the timer from the command line, use `open tomatobar://startStop`.
+## 与其他工具集成
+### 事件日志
+TomatoBar以JSON格式将状态转换记录到`~/Library/Containers/com.github.ivoronin.TomatoBar/Data/Library/Caches/TomatoBar.log`。使用这些数据分析你的生产力并丰富其他数据源。
+### 启动和停止计时器
+TomatoBar可以通过`tomatobar://`URL进行控制。要从命令行启动或停止计时器，使用`open tomatobar://startStop`。
 
-## Older versions
-Touch bar integration and older macOS versions (earlier than Big Sur) are supported by TomatoBar versions prior to 3.0
+## 旧版本
+Touch Bar集成和较早的macOS版本（早于Big Sur）在TomatoBar 3.0之前的版本中受支持。
 
-## Licenses
- - Timer sounds are licensed from buddhabeats
+## 许可证
+ - 计时器声音从buddhabeats获得授权

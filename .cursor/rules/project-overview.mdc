@@ -1,0 +1,61 @@
+---
+description: 
+globs: 
+alwaysApply: false
+---
+# TomatoBar项目概览
+
+## 项目简介
+
+TomatoBar是一个macOS菜单栏番茄工作法计时器应用，提供番茄工作法的所有基本功能，包括可配置的工作和休息间隔、声音提示、系统通知以及全局快捷键。
+
+## 核心文件与目录说明
+
+### 主要目录
+- [TomatoBar/](mdc:TomatoBar) - 主要源代码目录，包含应用程序核心逻辑和资源
+- [TomatoBar.xcodeproj/](mdc:TomatoBar.xcodeproj) - Xcode项目文件
+- [Icons/](mdc:Icons) - 图标资源文件
+- [.github/workflows/](mdc:.github/workflows) - GitHub Actions自动化工作流配置
+
+### 主要配置文件
+- [.swift-version](mdc:.swift-version) - 指定项目Swift版本
+- [.swiftlint.yml](mdc:.swiftlint.yml) - SwiftLint代码规范配置
+- [export_options.plist](mdc:export_options.plist) - 应用导出选项
+- [.gitignore](mdc:.gitignore) - Git忽略文件配置
+
+### 重要文档
+- [README.md](mdc:README.md) - 项目主要说明文档
+- [project_structure.md](mdc:project_structure.md) - 详细的项目结构和交互逻辑说明
+- [project_analysis.md](mdc:project_analysis.md) - 项目分析文档
+- [LICENSE](mdc:LICENSE) - 项目许可证
+
+### 源代码组织（TomatoBar目录）
+TomatoBar应用的主要源代码包含以下关键文件：
+
+- **App.swift** - 应用程序入口点，初始化和配置主要组件
+- **Timer.swift** - 核心计时器逻辑，负责状态管理和时间计算
+- **View.swift** - 定义用户界面，包括设置面板和交互控件
+- **State.swift** - 定义状态机类型，管理番茄钟状态转换
+- **Player.swift** - 负责播放音频提示
+- **Log.swift** - 提供日志记录功能
+- **Notifications.swift** - 管理系统通知的发送和处理
+
+### 资源文件
+- **Assets.xcassets/** - 存储应用使用的图像和音频资源
+- **en.lproj/** 和 **zh-Hans.lproj/** - 存储英文和简体中文的本地化字符串
+
+## 核心功能
+1. 番茄工作法计时器（工作/短休息/长休息周期）
+2. macOS菜单栏集成
+3. 可配置的工作和休息时间
+4. 音频提示
+5. 系统通知
+6. 全局快捷键
+7. URL Scheme支持 (`tomatobar://`)
+8. 事件日志记录
+
+## 技术架构
+- 使用SwiftUI构建界面
+- 状态机模式管理应用状态
+- 沙盒化应用设计（无特殊权限）
+- 支持多语言（英文和简体中文）

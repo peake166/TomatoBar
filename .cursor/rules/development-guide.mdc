@@ -1,0 +1,59 @@
+---
+description: 
+globs: 
+alwaysApply: false
+---
+# TomatoBar开发指南
+
+## 环境要求
+- macOS (推荐 Big Sur 或更高版本)
+- Xcode 13+
+- Swift 5.5+
+
+## 开发流程
+
+### 项目设置
+1. 克隆仓库：
+   ```bash
+   git clone <你的fork仓库URL>
+   cd TomatoBar
+   ```
+
+2. 使用Xcode打开项目：
+   ```bash
+   open TomatoBar.xcodeproj
+   ```
+
+3. 选择适当的模拟器或真机进行构建和运行
+
+### 主要文件修改指南
+
+#### 修改计时器逻辑
+- 查看 [TomatoBar/Timer.swift](mdc:TomatoBar/Timer.swift) 文件
+- 计时器状态在 [TomatoBar/State.swift](mdc:TomatoBar/State.swift) 中定义
+
+#### 修改用户界面
+- 主要界面定义在 [TomatoBar/View.swift](mdc:TomatoBar/View.swift)
+- 状态栏图标和菜单在 [TomatoBar/App.swift](mdc:TomatoBar/App.swift) 中设置
+
+#### 添加新功能
+1. 识别相关代码文件
+2. 遵循现有代码风格和架构
+3. 确保适当的错误处理
+4. 为新功能添加本地化字符串
+
+### 测试指南
+- 在多种macOS版本上测试
+- 测试各种状态转换和用户交互场景
+- 验证URL Scheme功能
+
+### 构建发布版本
+1. 在Xcode中选择"Product" > "Archive"
+2. 按照导出向导进行操作
+3. 使用 [export_options.plist](mdc:export_options.plist) 配置导出选项
+
+## 贡献指南
+- 保持代码简洁明了
+- 遵循SwiftLint规则 (查看 [.swiftlint.yml](mdc:.swiftlint.yml))
+- 添加适当的代码注释
+- 确保UI元素都有适当的本地化

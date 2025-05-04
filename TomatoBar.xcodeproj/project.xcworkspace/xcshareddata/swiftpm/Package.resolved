@@ -1,4 +1,5 @@
 {
+  "originHash" : "5c4cd9ff3b3f12c031a6dc7082385e7c45cc38258a4d9166083e5daf26fc8f8e",
   "pins" : [
     {
       "identity" : "keyboardshortcuts",
@@ -7,15 +8,6 @@
       "state" : {
         "revision" : "b878f8132be59576fc87e39405b1914eff9f55d3",
         "version" : "1.14.1"
-      }
-    },
-    {
-      "identity" : "launchatlogin",
-      "kind" : "remoteSourceControl",
-      "location" : "https://github.com/sindresorhus/LaunchAtLogin",
-      "state" : {
-        "revision" : "7ad6331f9c38953eb1ce8737758e18f7607e984a",
-        "version" : "5.0.0"
       }
     },
     {
@@ -28,5 +20,5 @@
       }
     }
   ],
-  "version" : 2
+  "version" : 3
 }

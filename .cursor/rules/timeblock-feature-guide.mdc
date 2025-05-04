@@ -1,0 +1,325 @@
+---
+description: 
+globs: 
+alwaysApply: false
+---
+# TomatoBar时间块功能开发指南
+
+## 功能需求概述
+
+### 时间块管理功能
+1. 允许用户自主添加多个时间块
+2. 用户可在不同时间块之间自由切换
+3. 从时间块A切换到时间块B时，B开始倒计时，A暂停计时
+4. 支持配置最高15小时的时长
+5. 支持用户修改和删除时间块
+6. 提供时间块一键刷新功能
+
+## 实现方案
+
+### 1. 核心数据模型扩展
+在 [TomatoBar/State.swift](mdc:TomatoBar/State.swift) 中添加TimeBlock模型：
+
+```swift
+struct TimeBlock: Identifiable, Codable {
+    var id: UUID = UUID()
+    var name: String
+    var duration: TimeInterval  // 支持最高15小时 (54000秒)
+    var isPaused: Bool = true
+    var remainingTime: TimeInterval
+    
+    init(name: String, durationMinutes: Double) {
+        self.name = name
+        self.duration = min(durationMinutes * 60, 54000) // 最大15小时
+        self.remainingTime = self.duration
+    }
+}
+```
+
+### 2. 状态管理扩展
+在 [TomatoBar/Timer.swift](mdc:TomatoBar/Timer.swift) 中扩展计时器类：
+
+```swift
+// 在TBTimer类中添加
+@Published var timeBlocks: [TimeBlock] = []
+@Published var activeTimeBlockId: UUID? = nil
+
+func switchToTimeBlock(_ id: UUID) {
+    // 暂停当前活动的时间块
+    if let activeId = activeTimeBlockId,
+       let index = timeBlocks.firstIndex(where: { $0.id == activeId }) {
+        timeBlocks[index].isPaused = true
+    }
+    
+    // 激活新的时间块
+    if let index = timeBlocks.firstIndex(where: { $0.id == id }) {
+        timeBlocks[index].isPaused = false
+        activeTimeBlockId = id
+        // 处理状态转换和UI更新
+    }
+}
+
+func addTimeBlock(name: String, durationMinutes: Double) {
+    let newBlock = TimeBlock(name: name, durationMinutes: durationMinutes)
+    timeBlocks.append(newBlock)
+    // 保存到用户默认设置
+    saveTimeBlocks()
+}
+
+func updateTimeBlock(id: UUID, name: String?, durationMinutes: Double?) {
+    if let index = timeBlocks.firstIndex(where: { $0.id == id }) {
+        if let name = name {
+            timeBlocks[index].name = name
+        }
+        if let durationMinutes = durationMinutes {
+            let newDuration = min(durationMinutes * 60, 54000)
+            timeBlocks[index].duration = newDuration
+            // 如果剩余时间大于新的总时长，则更新剩余时间
+            if timeBlocks[index].remainingTime > newDuration {
+                timeBlocks[index].remainingTime = newDuration
+            }
+        }
+        saveTimeBlocks()
+    }
+}
+
+func deleteTimeBlock(id: UUID) {
+    // 如果删除的是当前活动的时间块，先停止计时
+    if activeTimeBlockId == id {
+        activeTimeBlockId = nil
+    }
+    timeBlocks.removeAll(where: { $0.id == id })
+    saveTimeBlocks()
+}
+
+func resetTimeBlock(id: UUID) {
+    if let index = timeBlocks.firstIndex(where: { $0.id == id }) {
+        timeBlocks[index].remainingTime = timeBlocks[index].duration
+    }
+}
+
+func resetAllTimeBlocks() {
+    for i in 0..<timeBlocks.count {
+        timeBlocks[i].remainingTime = timeBlocks[i].duration
+    }
+    saveTimeBlocks()
+}
+
+private func saveTimeBlocks() {
+    // 使用UserDefaults或本地文件保存时间块数据
+}
+
+private func loadTimeBlocks() {
+    // 从UserDefaults或本地文件加载时间块数据
+}
+```
+
+### 3. 计时器逻辑修改
+修改 [TomatoBar/Timer.swift](mdc:TomatoBar/Timer.swift) 中的计时逻辑，支持时间块计时：
+
+```swift
+// 在现有的计时器逻辑中添加时间块处理
+func updateTimer() {
+    // 原有番茄钟逻辑保持不变...
+    
+    // 添加时间块计时逻辑
+    if let activeId = activeTimeBlockId,
+       let index = timeBlocks.firstIndex(where: { $0.id == activeId }),
+       !timeBlocks[index].isPaused {
+        timeBlocks[index].remainingTime -= 1
+        
+        // 检查是否完成
+        if timeBlocks[index].remainingTime <= 0 {
+            timeBlocks[index].isPaused = true
+            activeTimeBlockId = nil
+            // 播放完成声音
+            // 发送通知
+        }
+    }
+}
+```
+
+### 4. 用户界面扩展
+在 [TomatoBar/View.swift](mdc:TomatoBar/View.swift) 中添加时间块管理界面：
+
+```swift
+struct TimeBlocksView: View {
+    @ObservedObject var timer: TBTimer
+    @State private var showingAddSheet = false
+    @State private var newBlockName = ""
+    @State private var newBlockDuration: Double = 25
+    
+    var body: some View {
+        VStack {
+            List {
+                ForEach(timer.timeBlocks) { block in
+                    TimeBlockRow(block: block, isActive: timer.activeTimeBlockId == block.id)
+                        .onTapGesture {
+                            timer.switchToTimeBlock(block.id)
+                        }
+                }
+                .onDelete { indexSet in
+                    for index in indexSet {
+                        timer.deleteTimeBlock(timer.timeBlocks[index].id)
+                    }
+                }
+            }
+            
+            HStack {
+                Button("添加时间块") {
+                    showingAddSheet = true
+                }
+                
+                Spacer()
+                
+                Button("刷新所有") {
+                    timer.resetAllTimeBlocks()
+                }
+            }
+            .padding()
+        }
+        .sheet(isPresented: $showingAddSheet) {
+            // 添加时间块的表单...
+        }
+    }
+}
+
+struct TimeBlockRow: View {
+    let block: TimeBlock
+    let isActive: Bool
+    
+    var body: some View {
+        HStack {
+            VStack(alignment: .leading) {
+                Text(block.name)
+                    .font(.headline)
+                Text(formatTime(block.remainingTime))
+                    .font(.subheadline)
+            }
+            
+            Spacer()
+            
+            if isActive {
+                Image(systemName: "play.circle.fill")
+                    .foregroundColor(.green)
+            } else {
+                Image(systemName: "pause.circle")
+                    .foregroundColor(.gray)
+            }
+        }
+        .padding(.vertical, 4)
+    }
+    
+    func formatTime(_ seconds: TimeInterval) -> String {
+        // 格式化时间，支持小时:分钟:秒
+        let hours = Int(seconds) / 3600
+        let minutes = (Int(seconds) % 3600) / 60
+        let seconds = Int(seconds) % 60
+        
+        if hours > 0 {
+            return String(format: "%d:%02d:%02d", hours, minutes, seconds)
+        } else {
+            return String(format: "%02d:%02d", minutes, seconds)
+        }
+    }
+}
+```
+
+### 5. 菜单集成
+在 [TomatoBar/App.swift](mdc:TomatoBar/App.swift) 中集成时间块到菜单：
+
+```swift
+// 在状态栏菜单中添加时间块子菜单
+func buildMenu() -> NSMenu {
+    let menu = NSMenu()
+    // 现有菜单项...
+    
+    menu.addItem(NSMenuItem.separator())
+    
+    // 时间块子菜单
+    let timeBlocksMenu = NSMenu()
+    let timeBlocksItem = NSMenuItem(title: "时间块", action: nil, keyEquivalent: "")
+    timeBlocksItem.submenu = timeBlocksMenu
+    
+    // 添加动态时间块菜单项
+    for block in timer.timeBlocks {
+        let blockItem = NSMenuItem(
+            title: "\(block.name) (\(formatTime(block.remainingTime)))",
+            action: #selector(selectTimeBlock(_:)),
+            keyEquivalent: ""
+        )
+        blockItem.representedObject = block.id
+        if timer.activeTimeBlockId == block.id {
+            blockItem.state = .on
+        }
+        timeBlocksMenu.addItem(blockItem)
+    }
+    
+    // 管理时间块菜单项
+    timeBlocksMenu.addItem(NSMenuItem.separator())
+    timeBlocksMenu.addItem(NSMenuItem(
+        title: "管理时间块...", 
+        action: #selector(showTimeBlockManager), 
+        keyEquivalent: "")
+    )
+    
+    menu.addItem(timeBlocksItem)
+    
+    return menu
+}
+
+@objc func selectTimeBlock(_ sender: NSMenuItem) {
+    if let id = sender.representedObject as? UUID {
+        timer.switchToTimeBlock(id)
+    }
+}
+
+@objc func showTimeBlockManager() {
+    // 显示时间块管理窗口
+}
+```
+
+## 数据持久化
+
+使用UserDefaults存储时间块数据：
+
+```swift
+// 在TBTimer中添加
+private func saveTimeBlocks() {
+    do {
+        let data = try JSONEncoder().encode(timeBlocks)
+        UserDefaults.standard.set(data, forKey: "timeBlocks")
+    } catch {
+        print("无法保存时间块: \(error.localizedDescription)")
+    }
+}
+
+private func loadTimeBlocks() {
+    if let data = UserDefaults.standard.data(forKey: "timeBlocks") {
+        do {
+            timeBlocks = try JSONDecoder().decode([TimeBlock].self, from: data)
+        } catch {
+            print("无法加载时间块: \(error.localizedDescription)")
+        }
+    }
+}
+```
+
+## 实现步骤
+
+1. 创建TimeBlock数据模型
+2. 扩展TBTimer类支持时间块管理
+3. 修改计时器逻辑以支持时间块计时
+4. 创建时间块管理界面
+5. 将时间块集成到菜单栏
+6. 实现数据持久化
+7. 添加时间块通知和声音
+8. 测试各种场景下的时间块切换和管理
+
+## 优化建议
+
+1. 考虑添加时间块分类功能
+2. 提供时间块使用统计和报告
+3. 支持从Reminders或Calendar导入任务作为时间块
+4. 添加时间块历史记录功能
+5. 提供自定义每个时间块完成时的通知和声音

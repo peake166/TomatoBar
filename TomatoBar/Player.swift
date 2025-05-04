@@ -1,26 +1,17 @@
 import AVFoundation
 import SwiftUI
+import Combine
 
 class TBPlayer: ObservableObject {
     private var windupSound: AVAudioPlayer
     private var dingSound: AVAudioPlayer
     private var tickingSound: AVAudioPlayer
-
-    @AppStorage("windupVolume") var windupVolume: Double = 1.0 {
-        didSet {
-            setVolume(windupSound, windupVolume)
-        }
-    }
-    @AppStorage("dingVolume") var dingVolume: Double = 1.0 {
-        didSet {
-            setVolume(dingSound, dingVolume)
-        }
-    }
-    @AppStorage("tickingVolume") var tickingVolume: Double = 1.0 {
-        didSet {
-            setVolume(tickingSound, tickingVolume)
-        }
-    }
+    
+    // 使用AppSettings管理设置
+    private var settings = AppSettings.shared
+    
+    // 保存订阅
+    private var cancellables = Set<AnyCancellable>()
 
     private func setVolume(_ sound: AVAudioPlayer, _ volume: Double) {
         sound.setVolume(Float(volume), fadeDuration: 0)
@@ -45,9 +36,37 @@ class TBPlayer: ObservableObject {
         tickingSound.numberOfLoops = -1
         tickingSound.prepareToPlay()
 
-        setVolume(windupSound, windupVolume)
-        setVolume(dingSound, dingVolume)
-        setVolume(tickingSound, tickingVolume)
+        // 应用初始音量
+        setVolume(windupSound, settings.windupVolume)
+        setVolume(dingSound, settings.dingVolume)
+        setVolume(tickingSound, settings.tickingVolume)
+        
+        // 监听音量设置的变化
+        setupVolumeObservers()
+    }
+    
+    // 设置音量观察器 - 修复版本
+    private func setupVolumeObservers() {
+        // 使用Publisher而不是直接使用Binding
+        NotificationCenter.default.publisher(for: UserDefaults.didChangeNotification)
+            .sink { [weak self] _ in
+                guard let self = self else { return }
+                // 当用户默认值变化时更新音量
+                DispatchQueue.main.async {
+                    self.updateAllVolumes()
+                }
+            }
+            .store(in: &cancellables)
+        
+        // 初始更新一次
+        updateAllVolumes()
+    }
+    
+    // 更新所有音量
+    func updateAllVolumes() {
+        setVolume(windupSound, settings.windupVolume)
+        setVolume(dingSound, settings.dingVolume)
+        setVolume(tickingSound, settings.tickingVolume)
     }
 
     func playWindup() {
