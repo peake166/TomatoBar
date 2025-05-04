@@ -40,9 +40,6 @@ class TBTimer: ObservableObject {
         // 同步设置和时间块
         syncSettingsAndTimeBlocks()
         
-        // 恢复状态
-        setupStateRestoration()
-        
         // 设置时间块提醒观察器
         setupReminderObserver()
     }
@@ -144,13 +141,6 @@ class TBTimer: ObservableObject {
         // 初始状态也处理一次
         // 确保 handleStateRestoration 调用时传递的是正确的当前索引
         handleStateRestoration(currentIndex: timeBlockManager.currentBlockIndex)
-    }
-    
-    // 设置状态恢复
-    private func setupStateRestoration() {
-        // 状态恢复的观察逻辑已移至 observeTimeBlockChanges
-        // 保留此方法结构或移除取决于是否还有其他恢复相关设置
-        print("State restoration observer setup within observeTimeBlockChanges.")
     }
     
     // 处理状态恢复
@@ -481,6 +471,10 @@ class TBTimer: ObservableObject {
             
             // 更新显示
             updateTimeLeft()
+            
+            // 手动触发UI更新，确保所有时间块的剩余时间显示都会更新
+            // 因为SwiftUI会监听这些属性的变化，所以这里使用objectWillChange来触发视图更新
+            timeBlockManager.objectWillChange.send()
             
             // 检查时间块是否完成
             if timeBlockManager.currentState == .finished {

@@ -11,21 +11,6 @@ class TBLogEventAppStart: TBLogEvent {
     internal let timestamp: Date = Date()
 }
 
-class TBLogEventTransition: TBLogEvent {
-    internal let type = "transition"
-    internal let timestamp: Date = Date()
-
-    private let event: String
-    private let fromState: String
-    private let toState: String
-
-    init(fromContext ctx: TBStateMachine.Context) {
-        event = "\(ctx.event!)"
-        fromState = "\(ctx.fromState)"
-        toState = "\(ctx.toState)"
-    }
-}
-
 private let logFileName = "TomatoBar.log"
 private let lineEnd = "\n".data(using: .utf8)!
 

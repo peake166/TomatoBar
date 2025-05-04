@@ -20,7 +20,7 @@ struct TimeBlock: Identifiable, Codable {
     static func createDefault(type: TimeBlockType) -> TimeBlock {
         switch type {
         case .work:
-            return TimeBlock(name: "工作", duration: 25, type: .work, color: .red)
+            return TimeBlock(name: "工作", duration: 0, type: .work, color: .red)
         case .shortBreak:
             return TimeBlock(name: "短休息", duration: 5, type: .shortBreak, color: .green)
         case .longBreak:
@@ -67,17 +67,6 @@ enum TimeBlockEvent: EventType {
 
 // 状态机类型定义
 typealias TimeBlockStateMachine = StateMachine<TimeBlockState, TimeBlockEvent>
-
-// 为了兼容现有代码，保留原状态机定义
-typealias TBStateMachine = StateMachine<TBStateMachineStates, TBStateMachineEvents>
-
-enum TBStateMachineEvents: EventType {
-    case startStop, timerFired, skipRest
-}
-
-enum TBStateMachineStates: StateType {
-    case idle, work, rest
-}
 
 // 时间块提醒数据模型
 struct TimeBlockReminder: Identifiable, Codable {
@@ -136,6 +125,21 @@ class TimeBlockManager: ObservableObject {
     
     // 用于存储订阅的集合
     private var cancellables = Set<AnyCancellable>()
+    
+    // 获取指定时间块的剩余秒数
+    func getRemainingSeconds(for timeBlockId: UUID) -> Int? {
+        // 如果不是当前活动的时间块，返回保存的剩余时间（如果有）
+        if let index = timeBlocks.firstIndex(where: { $0.id == timeBlockId }) {
+            if currentBlockIndex == index {
+                // 如果是当前活动的时间块，返回实时的剩余秒数
+                return remainingSeconds
+            } else {
+                // 返回保存的剩余秒数（如果有）
+                return timeBlocks[index].savedRemainingSeconds
+            }
+        }
+        return nil
+    }
     
     init() {
         // 尝试加载保存的时间块数据
@@ -380,6 +384,15 @@ class TimeBlockManager: ObservableObject {
         
         if let duration = duration {
             block.duration = duration
+            
+            // 如果当前是活动的时间块，更新剩余时间
+            if currentBlockIndex == index && stateMachine.state == .active {
+                // 更新剩余时间（重新设置为新duration对应的秒数）
+                remainingSeconds = duration * 60
+            }
+            
+            // 无论是否活动，都更新保存的剩余时间
+            block.savedRemainingSeconds = duration * 60
         }
         
         if let type = type {
@@ -391,6 +404,9 @@ class TimeBlockManager: ObservableObject {
         }
         
         timeBlocks[index] = block
+        
+        // 保存更改
+        saveTimeBlocks()
     }
     
     // 删除时间块
@@ -401,6 +417,13 @@ class TimeBlockManager: ObservableObject {
     // 保存时间块数据
     func saveTimeBlocks() {
         guard let fileURL = timeBlocksFileURL else { return }
+        
+        // 确保当前时间块的剩余时间被保存
+        if let currentIndex = currentBlockIndex {
+            var block = timeBlocks[currentIndex]
+            block.savedRemainingSeconds = remainingSeconds
+            timeBlocks[currentIndex] = block
+        }
         
         do {
             let encoder = JSONEncoder()

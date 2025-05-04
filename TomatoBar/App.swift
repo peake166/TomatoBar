@@ -1,5 +1,4 @@
 import SwiftUI
-import LaunchAtLogin
 
 extension NSImage.Name {
     static let idle = Self("BarIconIdle")
@@ -16,8 +15,6 @@ struct TBApp: App {
 
     init() {
         TBStatusItem.shared = appDelegate
-        // 再次注释掉 LaunchAtLogin 功能
-        // LaunchAtLogin.migrateIfNeeded()
         logger.append(event: TBLogEventAppStart())
     }
 

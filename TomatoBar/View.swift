@@ -1,5 +1,4 @@
 import KeyboardShortcuts
-import LaunchAtLogin
 import SwiftUI
 
 extension KeyboardShortcuts.Name {
@@ -11,67 +10,100 @@ private struct TimeBlockRow: View {
     var timeBlock: TimeBlock
     var isActive: Bool
     var currentState: TimeBlockState  // 添加当前状态属性
+    var remainingSeconds: Int?  // 添加剩余时间参数
     var onTap: () -> Void
     var onEdit: () -> Void
     var onDelete: () -> Void
     var onManageReminders: () -> Void
-    var onPauseResume: () -> Void    // 添加暂停/继续回调
+    var onPauseResume: () -> Void    // 保留回调但不再使用专门的按钮
     
     @State private var showContextMenu = false
+    @State private var isHovering = false
     
     var body: some View {
         HStack {
+            // 左侧颜色条
             RoundedRectangle(cornerRadius: 4)
                 .fill(timeBlock.color.toColor())
                 .frame(width: 4)
             
-            VStack(alignment: .leading, spacing: 2) {
-                Text(timeBlock.name)
-                    .fontWeight(.medium)
+            // 主要内容区域
+            VStack(alignment: .leading, spacing: 4) {
+                // 第一行：名称和状态指示器
+                HStack(alignment: .center, spacing: 6) {
+                    Text(timeBlock.name)
+                        .fontWeight(.medium)
+                    
+                    // 如果正在运行，显示状态指示器
+                    if isActive {
+                        Circle()
+                            .fill(currentState == .active ? Color.green : Color.orange)
+                            .frame(width: 6, height: 6)
+                            .padding(.top, 1) // 微调位置对齐
+                    }
+                }
                 
-                Text(formatDuration(timeBlock.duration))
-                    .font(.caption)
-                    .foregroundColor(.secondary)
+                // 显示时间信息（活动状态显示剩余时间，非活动状态显示总时长）
+                HStack(spacing: 4) {
+                    Image(systemName: isActive ? "timer" : "clock")
+                        .font(.caption2)
+                        .foregroundColor(isActive ? (currentState == .active ? .green : .orange) : .secondary)
+                    
+                    // 如果是活动状态且有剩余时间，显示剩余时间；否则显示总时长
+                    if isActive, let seconds = remainingSeconds {
+                        Text(formatRemainingTime(seconds))
+                            .font(.system(.caption, design: .monospaced))
+                            .foregroundColor(currentState == .active ? .green : .orange)
+                            .fontWeight(.medium)
+                    } else {
+                        Text(formatDuration(timeBlock.duration))
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                    }
+                }
             }
             .padding(.leading, 4)
             
             Spacer()
             
-            // 类型标签
-            Text(timeBlock.type.name())
-                .font(.caption)
-                .padding(.horizontal, 6)
-                .padding(.vertical, 2)
-                .background(
-                    RoundedRectangle(cornerRadius: 4)
-                        .fill(Color.secondary.opacity(0.2))
-                )
-            
-            // 提醒标记（如果有提醒）
-            if !timeBlock.reminders.isEmpty {
-                Image(systemName: "bell.fill")
+            // 右侧信息和按钮区域
+            HStack(spacing: 8) {
+                // 类型标签
+                Text(timeBlock.type.name())
                     .font(.caption)
-                    .foregroundColor(.orange)
-            }
-            
-            // 暂停/继续按钮 - 仅在该时间块处于活动状态时显示
-            if isActive {
-                Button(action: onPauseResume) {
-                    Image(systemName: currentState == .active ? "pause.fill" : "play.fill")
+                    .padding(.horizontal, 6)
+                    .padding(.vertical, 2)
+                    .background(
+                        RoundedRectangle(cornerRadius: 4)
+                            .fill(Color.secondary.opacity(0.2))
+                    )
+                
+                // 提醒标记（如果有提醒）
+                if !timeBlock.reminders.isEmpty {
+                    Image(systemName: "bell.fill")
                         .font(.caption)
-                        .foregroundColor(currentState == .active ? .orange : .green)
+                        .foregroundColor(.orange)
                 }
-                .buttonStyle(.plain)
-                .padding(.leading, 4)
+                
+                // 操作按钮组 - 鼠标悬停时显示
+                HStack(spacing: 8) {               
+                    // 编辑按钮
+                    Button(action: onEdit) {
+                        Image(systemName: "pencil")
+                            .font(.caption)
+                    }
+                    .buttonStyle(.plain)
+                    
+                    // 删除按钮
+                    Button(action: onDelete) {
+                        Image(systemName: "trash")
+                            .font(.caption)
+                            .foregroundColor(.red)
+                    }
+                    .buttonStyle(.plain)
+                }
+                .opacity(isHovering ? 1.0 : 0.0)
             }
-            
-            // 编辑按钮
-            Button(action: onEdit) {
-                Image(systemName: "pencil")
-                    .font(.caption)
-            }
-            .buttonStyle(.plain)
-            .padding(.leading, 4)
         }
         .padding(8)
         .background(
@@ -79,6 +111,9 @@ private struct TimeBlockRow: View {
                 .fill(isActive ? Color.accentColor.opacity(0.1) : Color.clear)
         )
         .contentShape(Rectangle())
+        .onHover { hovering in
+            isHovering = hovering
+        }
         .onTapGesture(perform: onTap)
         .contextMenu {
             Button(action: onEdit) {
@@ -104,6 +139,19 @@ private struct TimeBlockRow: View {
             return "\(hours)小时 \(remainingMinutes)分钟"
         } else {
             return "\(minutes)分钟"
+        }
+    }
+    
+    // 格式化剩余时间显示
+    private func formatRemainingTime(_ seconds: Int) -> String {
+        let hours = seconds / 3600
+        let minutes = (seconds % 3600) / 60
+        let secs = seconds % 60
+        
+        if hours > 0 {
+            return String(format: "%d:%02d:%02d", hours, minutes, secs)
+        } else {
+            return String(format: "%02d:%02d", minutes, secs)
         }
     }
 }
@@ -236,7 +284,6 @@ private struct TimeBlockEditView: View {
                 
                 Button("保存", action: onSave)
                     .keyboardShortcut(.defaultAction)
-                    .disabled(hours == 0 && minutes == 0) // 禁止保存零时长
             }
             .padding(.top, 8)
         }
@@ -249,12 +296,6 @@ private struct TimeBlockEditView: View {
         // 将小时和分钟合并为总分钟数
         let totalMinutes = hours * 60 + minutes
         timeBlock.duration = totalMinutes
-        
-        // 确保至少有1分钟的时长
-        if totalMinutes == 0 && minutes == 0 && hours == 0 {
-            minutes = 1
-            timeBlock.duration = 1
-        }
     }
     
     // 格式化时间显示
@@ -432,32 +473,41 @@ private struct TimeBlocksView: View {
             }
             .padding(.horizontal, 8)
             
-            // 时间块列表 - 修改为支持侧滑删除功能
+            // 时间块列表
             List {
                 ForEach(timer.timeBlockManager.timeBlocks) { block in
                     TimeBlockRow(
                         timeBlock: block,
                         isActive: timer.timeBlockManager.currentBlockIndex == timer.timeBlockManager.timeBlocks.firstIndex(where: { $0.id == block.id }),
                         currentState: timer.timeBlockManager.currentState,
+                        remainingSeconds: timer.timeBlockManager.getRemainingSeconds(for: block.id),
                         onTap: {
-                            // 如果当前无活动时间块，则开始这个时间块
+                            // 获取当前块的索引
+                            let blockIndex = timer.timeBlockManager.timeBlocks.firstIndex(where: { $0.id == block.id })
+                            let isCurrentBlock = timer.timeBlockManager.currentBlockIndex == blockIndex
+                            
+                            // 根据当前状态执行不同操作
                             if timer.timeBlockManager.currentState == .idle {
-                                if let index = timer.timeBlockManager.timeBlocks.firstIndex(where: { $0.id == block.id }) {
+                                // 如果空闲状态，启动时间块
+                                if let index = blockIndex {
                                     timer.startTimeBlock(index: index)
                                 }
+                            } 
+                            else if isCurrentBlock {
+                                // 如果是当前活动的时间块
+                                if timer.timeBlockManager.currentState == .active {
+                                    // 正在运行，点击暂停
+                                    timer.pauseCurrentTimeBlock()
+                                } else if timer.timeBlockManager.currentState == .paused {
+                                    // 已暂停，点击继续
+                                    timer.resumeCurrentTimeBlock()
+                                }
                             }
-                            // 如果当前正在运行这个时间块，则暂停
-                            else if timer.timeBlockManager.currentBlockIndex == timer.timeBlockManager.timeBlocks.firstIndex(where: { $0.id == block.id }) && timer.timeBlockManager.currentState == .active {
-                                timer.pauseCurrentTimeBlock()
-                            }
-                            // 如果当前正在暂停这个时间块，则继续
-                            else if timer.timeBlockManager.currentBlockIndex == timer.timeBlockManager.timeBlocks.firstIndex(where: { $0.id == block.id }) && timer.timeBlockManager.currentState == .paused {
-                                timer.resumeCurrentTimeBlock()
-                            }
-                            // 否则，如果有其他活动时间块，先停止然后开始这个
-                            else if timer.timeBlockManager.currentState != .idle {
+                            else {
+                                // 点击了不同于当前活动的时间块，切换到该时间块
+                                // 先停止当前的，再启动新的
                                 timer.stopCurrentTimeBlock()
-                                if let index = timer.timeBlockManager.timeBlocks.firstIndex(where: { $0.id == block.id }) {
+                                if let index = blockIndex {
                                     timer.startTimeBlock(index: index)
                                 }
                             }
@@ -475,36 +525,12 @@ private struct TimeBlocksView: View {
                             // Implementation needed
                         },
                         onPauseResume: {
-                            let isCurrentBlock = timer.timeBlockManager.currentBlockIndex == timer.timeBlockManager.timeBlocks.firstIndex(where: { $0.id == block.id })
-                            if isCurrentBlock {
-                                if timer.timeBlockManager.currentState == .active {
-                                    timer.pauseCurrentTimeBlock()
-                                } else if timer.timeBlockManager.currentState == .paused {
-                                    timer.resumeCurrentTimeBlock()
-                                }
-                            }
+                            // 这个回调现在不再使用，但为兼容性暂时保留
+                            // 原有逻辑已移到onTap处理
                         }
                     )
                     .listRowInsets(EdgeInsets(top: 1, leading: 1, bottom: 1, trailing: 1))
                     .listRowBackground(Color.clear)
-                    // 添加侧滑操作
-                    .swipeActions(edge: .trailing, allowsFullSwipe: true) {
-                        Button(role: .destructive) {
-                            blockToDelete = block.id
-                            showDeleteAlert = true
-                        } label: {
-                            Label("删除", systemImage: "trash")
-                        }
-                        
-                        Button {
-                            editingBlock = block
-                            isEditing = true
-                            isAddingNew = false
-                        } label: {
-                            Label("编辑", systemImage: "pencil")
-                        }
-                        .tint(.blue)
-                    }
                 }
                 .onMove { source, destination in
                     timer.timeBlockManager.moveTimeBlock(from: source, to: destination)
@@ -626,8 +652,6 @@ private struct TimeBlocksView: View {
 private struct SettingsView: View {
     @ObservedObject var settings = AppSettings.shared
     @EnvironmentObject var timer: TBTimer
-    // 再次注释掉 LaunchAtLogin 相关对象
-    // @ObservedObject private var launchAtLogin = LaunchAtLogin.observable
 
     var body: some View {
         VStack {
@@ -649,14 +673,6 @@ private struct SettingsView: View {
                 .onChange(of: settings.showTimerInMenuBar) {
                     timer.updateTimeLeft()
                 }
-            // 再次注释掉 LaunchAtLogin 相关 UI
-            /*
-            Toggle(isOn: $launchAtLogin.isEnabled) {
-                Text(NSLocalizedString("SettingsView.launchAtLogin.label",
-                                       comment: "Launch at login label"))
-                    .frame(maxWidth: .infinity, alignment: .leading)
-            }.toggleStyle(.switch)
-            */
             
             Divider()
                 .padding(.vertical, 8)
@@ -1082,16 +1098,65 @@ struct TBPopoverView: View {
             if viewSelection == "timeblocks" {
                 // 时间块列表
                 ScrollView {
+                    // 添加刷新操作按钮
+                    HStack {
+                        Button(action: {
+                            // 执行刷新操作
+                            timer.timeBlockManager.refreshAllTimeBlocks()
+                        }) {
+                            HStack(spacing: 4) {
+                                Image(systemName: "arrow.clockwise")
+                                Text("一键重置时间")
+                            }
+                        }
+                        .buttonStyle(.plain)
+                        .padding(6)
+                        .background(
+                            RoundedRectangle(cornerRadius: 6)
+                                .fill(Color.blue.opacity(0.1))
+                        )
+                        
+                        Spacer()
+                    }
+                    .padding(.horizontal)
+                    .padding(.top, 4)
+                    
                     VStack(spacing: 8) {
                         ForEach(timer.timeBlockManager.timeBlocks.indices, id: \.self) { index in
                             TimeBlockRow(
                                 timeBlock: timer.timeBlockManager.timeBlocks[index],
                                 isActive: timer.timeBlockManager.currentBlockIndex == index,
                                 currentState: timer.timeBlockManager.currentState,
+                                remainingSeconds: timer.timeBlockManager.getRemainingSeconds(for: timer.timeBlockManager.timeBlocks[index].id),
                                 onTap: {
-                                    // 只有在空闲状态或点击的不是当前活动块时才启动
-                                    if timer.timeBlockManager.currentState == .idle || timer.timeBlockManager.currentBlockIndex != index {
-                                        timer.startTimeBlock(index: index)
+                                    // 获取当前块的索引
+                                    let blockIndex = timer.timeBlockManager.timeBlocks.firstIndex(where: { $0.id == timer.timeBlockManager.timeBlocks[index].id })
+                                    let isCurrentBlock = timer.timeBlockManager.currentBlockIndex == blockIndex
+                                    
+                                    // 根据当前状态执行不同操作
+                                    if timer.timeBlockManager.currentState == .idle {
+                                        // 如果空闲状态，启动时间块
+                                        if let index = blockIndex {
+                                            timer.startTimeBlock(index: index)
+                                        }
+                                    } 
+                                    else if isCurrentBlock {
+                                        // 如果是当前活动的时间块
+                                        if timer.timeBlockManager.currentState == .active {
+                                            // 正在运行，点击暂停
+                                            timer.pauseCurrentTimeBlock()
+                                        } else if timer.timeBlockManager.currentState == .paused {
+                                            // 已暂停，点击继续
+                                            timer.resumeCurrentTimeBlock()
+                                        }
+                                    }
+                                    else {
+                                        // 点击了不同于当前活动的时间块，切换到该时间块
+                                        // 先停止当前的，再启动新的
+                                        timer.stopCurrentTimeBlock()
+                                        if let index = blockIndex {
+                                            timer.startTimeBlock(index: index)
+                                        }
                                     }
                                 },
                                 onEdit: {
@@ -1104,17 +1169,11 @@ struct TBPopoverView: View {
                                     managingRemindersForBlock = timer.timeBlockManager.timeBlocks[index]
                                 },
                                 onPauseResume: {
-                                    let isCurrentBlock = timer.timeBlockManager.currentBlockIndex == index
-                                    if isCurrentBlock {
-                                        if timer.timeBlockManager.currentState == .active {
-                                            timer.pauseCurrentTimeBlock()
-                                        } else if timer.timeBlockManager.currentState == .paused {
-                                            timer.resumeCurrentTimeBlock()
-                                        }
-                                    }
+                                    // 这个回调现在不再使用，但为兼容性暂时保留
+                                    // 原有逻辑已移到onTap处理
                                 }
                             )
-                            // 添加侧滑手势删除功能
+                            // 恢复右键菜单功能
                             .contextMenu {
                                 Button(action: {
                                     editingTimeBlock = timer.timeBlockManager.timeBlocks[index]
