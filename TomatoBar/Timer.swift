@@ -22,7 +22,7 @@ class TBTimer: ObservableObject {
 
     init() {
         timerFormatter.unitsStyle = .positional
-        timerFormatter.allowedUnits = [.minute, .second]
+        timerFormatter.allowedUnits = [.hour, .minute, .second]
         timerFormatter.zeroFormattingBehavior = .pad
 
         KeyboardShortcuts.onKeyUp(for: .startStopTimer) { [weak self] in
@@ -223,7 +223,7 @@ class TBTimer: ObservableObject {
         }
     }
     
-    // 切换当前时间块状态（开始/停止）
+    // 切换当前时间块状态（开始/暂停/继续）
     func toggleCurrentTimeBlock() {
         let state = timeBlockManager.currentState
         
@@ -234,9 +234,13 @@ class TBTimer: ObservableObject {
                 startTimeBlock(index: 0)
             }
         } 
-        // 如果当前有活动的时间块，停止它
-        else if state == .active || state == .paused {
-            stopCurrentTimeBlock()
+        // 如果当前正在运行，则暂停
+        else if state == .active {
+            pauseCurrentTimeBlock()
+        }
+        // 如果当前已暂停，则继续
+        else if state == .paused {
+            resumeCurrentTimeBlock()
         }
     }
     
@@ -343,6 +347,16 @@ class TBTimer: ObservableObject {
     
     // 停止当前时间块
     func stopCurrentTimeBlock() {
+        // 保存当前剩余时间到时间块中
+        if let index = timeBlockManager.currentBlockIndex {
+            var block = timeBlockManager.timeBlocks[index]
+            block.savedRemainingSeconds = timeBlockManager.remainingSeconds
+            timeBlockManager.timeBlocks[index] = block
+            
+            // 确保保存更改
+            timeBlockManager.saveTimeBlocks()
+        }
+        
         // 停止滴答声
         player.stopTicking()
         
@@ -415,15 +429,29 @@ class TBTimer: ObservableObject {
     // 更新菜单栏图标
     private func updateMenuBarIcon() {
         if let currentBlock = timeBlockManager.currentTimeBlock {
-            // 根据当前活动的时间块类型设置状态栏图标
-            TBStatusItem.shared.setIcon(name: currentBlock.type.iconName())
+            // 根据当前活动的时间块类型和状态设置状态栏图标
+            let iconName = currentBlock.type.iconName()
+            TBStatusItem.shared.setIcon(name: iconName)
+            
+            // 更新时间显示
+            updateTimeLeft()
+            
+            // 如果处于暂停状态，在标题前添加暂停标识
+            if timeBlockManager.currentState == .paused {
+                // 如果已经显示了时间，在前面添加暂停标识
+                if settings.showTimerInMenuBar {
+                    let pausedTimeString = "⏸︎ " + timeLeftString
+                    TBStatusItem.shared.setTitle(title: pausedTimeString)
+                } else {
+                    // 如果没有显示时间，只显示暂停标识
+                    TBStatusItem.shared.setTitle(title: "⏸︎")
+                }
+            }
         } else {
             // 如果没有活动的时间块，设置为空闲图标
             TBStatusItem.shared.setIcon(name: .idle)
+            TBStatusItem.shared.setTitle(title: nil)
         }
-        
-        // 更新时间显示
-        updateTimeLeft()
     }
 
     // 启动计时器

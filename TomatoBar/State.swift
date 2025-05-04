@@ -11,6 +11,7 @@ struct TimeBlock: Identifiable, Codable {
     var type: TimeBlockType
     var color: TimeBlockColor
     var isActive: Bool = false
+    var savedRemainingSeconds: Int? = nil // 保存的剩余时间（秒）
     
     // 添加自定义提醒选项
     var reminders: [TimeBlockReminder] = []
@@ -218,8 +219,12 @@ class TimeBlockManager: ObservableObject {
         block.isActive = true
         timeBlocks[index] = block
         
-        // 设置剩余时间
-        remainingSeconds = block.duration * 60
+        // 如果有保存的剩余时间，使用它，否则使用全新的时间
+        if let savedSeconds = block.savedRemainingSeconds {
+            remainingSeconds = savedSeconds
+        } else {
+            remainingSeconds = block.duration * 60
+        }
         
         // 重置已触发的提醒
         triggeredReminders.removeAll()
@@ -231,6 +236,14 @@ class TimeBlockManager: ObservableObject {
     // 暂停当前时间块
     func pauseCurrentTimeBlock() {
         guard currentBlockIndex != nil && stateMachine.state == .active else { return }
+        
+        // 保存当前剩余时间到时间块中
+        if let index = currentBlockIndex {
+            var block = timeBlocks[index]
+            block.savedRemainingSeconds = remainingSeconds
+            timeBlocks[index] = block
+        }
+        
         stateMachine <-! .pause
     }
     
@@ -422,6 +435,13 @@ class TimeBlockManager: ObservableObject {
     func saveState() {
         guard let fileURL = stateFileURL else { return }
         
+        // 在保存状态前，确保当前剩余时间被保存到当前时间块中
+        if let index = currentBlockIndex {
+            var block = timeBlocks[index]
+            block.savedRemainingSeconds = remainingSeconds
+            timeBlocks[index] = block
+        }
+        
         // 创建状态数据结构
         let stateData = TimeBlockStateData(
             currentState: stateMachine.state,
@@ -451,14 +471,19 @@ class TimeBlockManager: ObservableObject {
                 let decoder = JSONDecoder()
                 let stateData = try decoder.decode(TimeBlockStateData.self, from: data)
                 
-                // 恢复状态
-                stateMachine = TimeBlockStateMachine(state: stateData.currentState)
-                currentBlockIndex = stateData.currentBlockIndex
-                remainingSeconds = stateData.remainingSeconds
+                // 只恢复部分状态：完成的工作数和是否需要长休息
+                // 不恢复活动状态，总是以空闲状态启动
+                stateMachine = TimeBlockStateMachine(state: .idle)
+                currentBlockIndex = nil
+                
+                // 不需要恢复 remainingSeconds 到活动状态，因为我们已经把它保存在每个时间块中了
+                remainingSeconds = 0
+                
+                // 恢复其他统计数据
                 completedWorkBlocks = stateData.completedWorkBlocks
                 isNextBreakLong = stateData.isNextBreakLong
                 
-                print("状态数据已加载")
+                print("部分状态数据已加载（应用启动时总是空闲状态）")
                 return true
             }
         } catch {
@@ -537,6 +562,27 @@ class TimeBlockManager: ObservableObject {
         
         // 保存更改
         saveTimeBlocks()
+    }
+    
+    // 添加刷新方法 - 重置所有时间块的剩余时间
+    func refreshAllTimeBlocks() {
+        // 对每个时间块重置剩余时间
+        for index in timeBlocks.indices {
+            var block = timeBlocks[index]
+            block.savedRemainingSeconds = block.duration * 60
+            timeBlocks[index] = block
+        }
+        
+        // 如果当前有活动的时间块，更新剩余时间
+        if let currentIndex = currentBlockIndex {
+            remainingSeconds = timeBlocks[currentIndex].duration * 60
+        }
+        
+        // 保存更改
+        saveTimeBlocks()
+        saveState()
+        
+        print("所有时间块已刷新")
     }
 }
 
@@ -673,9 +719,15 @@ extension TimeBlockType {
 extension TimeBlockManager {
     // 将剩余时间格式化为字符串
     func formattedTimeRemaining() -> String {
-        let minutes = remainingSeconds / 60
+        let hours = remainingSeconds / 3600
+        let minutes = (remainingSeconds % 3600) / 60
         let seconds = remainingSeconds % 60
-        return String(format: "%02d:%02d", minutes, seconds)
+        
+        if hours > 0 {
+            return String(format: "%d:%02d:%02d", hours, minutes, seconds)
+        } else {
+            return String(format: "%02d:%02d", minutes, seconds)
+        }
     }
 }
 
@@ -697,6 +749,10 @@ class AppSettings: ObservableObject {
     @AppStorage("windupVolume") var windupVolume: Double = 1.0
     @AppStorage("dingVolume") var dingVolume: Double = 1.0
     @AppStorage("tickingVolume") var tickingVolume: Double = 1.0
+    // 声音启用/禁用设置
+    @AppStorage("isWindupEnabled") var isWindupEnabled: Bool = true
+    @AppStorage("isDingEnabled") var isDingEnabled: Bool = true
+    @AppStorage("isTickingEnabled") var isTickingEnabled: Bool = true
     
     // 隐藏设置
     @AppStorage("overrunTimeLimit") var overrunTimeLimit: Double = -60.0

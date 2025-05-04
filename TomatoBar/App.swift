@@ -151,35 +151,37 @@ class TBStatusItem: NSObject, NSApplicationDelegate {
     
     // 添加控制菜单项
     private func addControlMenuItems(to menu: NSMenu) {
-        // 获取当前状态
         let currentState = mainView?.timer.timeBlockManager.currentState
-        let isActive = currentState == .active
-        let isPaused = currentState == .paused
+        let hasActiveTimeBlock = mainView?.timer.timeBlockManager.currentBlockIndex != nil
         
-        // 开始/暂停/继续按钮
-        if isPaused {
-            let resumeItem = NSMenuItem(title: "继续", action: #selector(resumeMenuItemClicked), keyEquivalent: "")
-            resumeItem.image = NSImage(systemSymbolName: "play.fill", accessibilityDescription: nil)
-            menu.addItem(resumeItem)
-        } else if isActive {
-            let pauseItem = NSMenuItem(title: "暂停", action: #selector(pauseMenuItemClicked), keyEquivalent: "")
-            pauseItem.image = NSImage(systemSymbolName: "pause.fill", accessibilityDescription: nil)
-            menu.addItem(pauseItem)
-        } else {
-            let startItem = NSMenuItem(title: "开始工作", action: #selector(startMenuItemClicked), keyEquivalent: "")
+        // 添加开始/暂停/继续/停止选项
+        // 如果没有活动的时间块或处于空闲状态，显示开始选项
+        if !hasActiveTimeBlock || currentState == .idle {
+            let startItem = NSMenuItem(title: "开始", action: #selector(startMenuItemClicked), keyEquivalent: "")
             startItem.image = NSImage(systemSymbolName: "play.fill", accessibilityDescription: nil)
             menu.addItem(startItem)
         }
-        
-        // 跳过按钮（仅在活动或暂停状态下可用）
-        if isActive || isPaused {
+        // 如果有活动的时间块
+        else if hasActiveTimeBlock {
+            // 如果处于活动状态，显示暂停选项
+            if currentState == .active {
+                let pauseItem = NSMenuItem(title: "暂停", action: #selector(pauseMenuItemClicked), keyEquivalent: "")
+                pauseItem.image = NSImage(systemSymbolName: "pause.fill", accessibilityDescription: nil)
+                menu.addItem(pauseItem)
+            }
+            // 如果处于暂停状态，显示继续选项
+            else if currentState == .paused {
+                let resumeItem = NSMenuItem(title: "继续", action: #selector(resumeMenuItemClicked), keyEquivalent: "")
+                resumeItem.image = NSImage(systemSymbolName: "play.fill", accessibilityDescription: nil)
+                menu.addItem(resumeItem)
+            }
+            
+            // 跳过选项
             let skipItem = NSMenuItem(title: "跳过", action: #selector(skipMenuItemClicked), keyEquivalent: "")
             skipItem.image = NSImage(systemSymbolName: "forward.fill", accessibilityDescription: nil)
             menu.addItem(skipItem)
-        }
-        
-        // 停止按钮（仅在活动或暂停状态下可用）
-        if isActive || isPaused {
+            
+            // 停止选项
             let stopItem = NSMenuItem(title: "停止", action: #selector(stopMenuItemClicked), keyEquivalent: "")
             stopItem.image = NSImage(systemSymbolName: "stop.fill", accessibilityDescription: nil)
             menu.addItem(stopItem)

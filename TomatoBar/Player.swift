@@ -70,15 +70,24 @@ class TBPlayer: ObservableObject {
     }
 
     func playWindup() {
-        windupSound.play()
+        // 检查是否启用了开始声音
+        if settings.isWindupEnabled {
+            windupSound.play()
+        }
     }
 
     func playDing() {
-        dingSound.play()
+        // 检查是否启用了结束声音
+        if settings.isDingEnabled {
+            dingSound.play()
+        }
     }
 
     func startTicking() {
-        tickingSound.play()
+        // 检查是否启用了秒针声音
+        if settings.isTickingEnabled {
+            tickingSound.play()
+        }
     }
 
     func stopTicking() {
