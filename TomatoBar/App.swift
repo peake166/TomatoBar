@@ -1,4 +1,5 @@
 import SwiftUI
+import ServiceManagement
 
 extension NSImage.Name {
     static let idle = Self("BarIconIdle")
@@ -20,12 +21,35 @@ struct TBApp: App {
         
         TBStatusItem.shared = appDelegate
         logger.append(event: TBLogEventAppStart())
+        
+        // 初始化并同步开机自启动状态
+        syncLaunchAtLoginState()
     }
 
     var body: some Scene {
         Settings {
             EmptyView()
         }
+    }
+    
+    // 同步开机自启动状态
+    private func syncLaunchAtLoginState() {
+        #if os(macOS)
+        let settings = AppSettings.shared
+        let currentlyEnabled: Bool
+        
+        if #available(macOS 13.0, *) {
+            currentlyEnabled = SMAppService.mainApp.status == .enabled
+        } else {
+            // 旧版API检查方法不精确，我们依赖存储的设置值
+            currentlyEnabled = settings.launchAtLogin
+        }
+        
+        if currentlyEnabled != settings.launchAtLogin {
+            // 如果不一致，以系统实际状态为准
+            settings.launchAtLogin = currentlyEnabled
+        }
+        #endif
     }
 }
 

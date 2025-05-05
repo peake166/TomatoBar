@@ -768,6 +768,9 @@ class AppSettings: ObservableObject {
     @AppStorage("showTimerInMenuBar") var showTimerInMenuBar: Bool = true
     @AppStorage("stopAfterBreak") var stopAfterBreak: Bool = false
     
+    // 开机自启动设置
+    @AppStorage("launchAtLogin") var launchAtLogin: Bool = false
+    
     // 声音设置
     @AppStorage("windupVolume") var windupVolume: Double = 1.0
     @AppStorage("dingVolume") var dingVolume: Double = 1.0

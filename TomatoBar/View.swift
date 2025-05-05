@@ -1,5 +1,6 @@
 import KeyboardShortcuts
 import SwiftUI
+import ServiceManagement
 
 extension KeyboardShortcuts.Name {
     static let startStopTimer = Self("startStopTimer")
@@ -674,6 +675,23 @@ private struct SettingsView: View {
                     timer.updateTimeLeft()
                 }
             
+            // 添加开机自启动选项
+            Toggle(isOn: Binding<Bool>(
+                get: { settings.launchAtLogin },
+                set: { newValue in
+                    // 尝试设置登录项
+                    let success = setLaunchAtLogin(newValue)
+                    // 只有成功时才更新设置
+                    if success {
+                        settings.launchAtLogin = newValue
+                    }
+                }
+            )) {
+                Text(NSLocalizedString("SettingsView.launchAtLogin.label",
+                                     comment: "Launch at login label"))
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }.toggleStyle(.switch)
+            
             Divider()
                 .padding(.vertical, 8)
             
@@ -694,6 +712,59 @@ private struct SettingsView: View {
             Spacer().frame(minHeight: 0)
         }
         .padding(4)
+        .onAppear {
+            // 当视图出现时，同步系统状态
+            syncLaunchAtLoginState()
+        }
+    }
+    
+    // 设置开机自启动
+    private func setLaunchAtLogin(_ enabled: Bool) -> Bool {
+        #if os(macOS)
+        if #available(macOS 13.0, *) {
+            // 使用现代API (macOS 13+)
+            do {
+                if enabled {
+                    if SMAppService.mainApp.status == .enabled {
+                        return true // 已经启用，不需要操作
+                    }
+                    try SMAppService.mainApp.register()
+                } else {
+                    if SMAppService.mainApp.status == .notRegistered {
+                        return true // 已经禁用，不需要操作
+                    }
+                    try SMAppService.mainApp.unregister()
+                }
+                return true
+            } catch {
+                print("设置开机自启动失败: \(error.localizedDescription)")
+                return false
+            }
+        } else {
+            // 旧版macOS使用传统API
+            return SMLoginItemSetEnabled(Bundle.main.bundleIdentifier! as CFString, enabled)
+        }
+        #else
+        return false
+        #endif
+    }
+    
+    // 同步开机自启动状态
+    private func syncLaunchAtLoginState() {
+        #if os(macOS)
+        let currentlyEnabled: Bool
+        if #available(macOS 13.0, *) {
+            currentlyEnabled = SMAppService.mainApp.status == .enabled
+        } else {
+            // 旧版API检查方法不精确，我们依赖存储的设置值
+            currentlyEnabled = settings.launchAtLogin
+        }
+        
+        if currentlyEnabled != settings.launchAtLogin {
+            // 如果不一致，以系统实际状态为准
+            settings.launchAtLogin = currentlyEnabled
+        }
+        #endif
     }
 }
 
