@@ -428,6 +428,10 @@ class TimeBlockManager: ObservableObject {
         }
         
         if let duration = duration {
+            // 保存旧的持续时间，用于计算比例
+            let oldDuration = block.duration
+            
+            // 更新持续时间
             block.duration = duration
             
             // 如果当前是活动的时间块，更新剩余时间
@@ -436,8 +440,27 @@ class TimeBlockManager: ObservableObject {
                 remainingSeconds = duration * 60
             }
             
-            // 无论是否活动，都更新保存的剩余时间
-            block.savedRemainingSeconds = duration * 60
+            // 处理保存的剩余时间
+            if let savedSeconds = block.savedRemainingSeconds {
+                // 如果剩余时间等于旧持续时间（即未开始计时），则直接使用新持续时间
+                if savedSeconds == oldDuration * 60 {
+                    block.savedRemainingSeconds = duration * 60
+                }
+                // 如果已经开始计时并且有剩余时间，按比例调整剩余时间
+                else if oldDuration > 0 {
+                    // 计算已使用的比例
+                    let usedRatio = 1.0 - (Double(savedSeconds) / Double(oldDuration * 60))
+                    // 按照相同比例应用到新的持续时间
+                    let newRemainingSeconds = Int(Double(duration * 60) * (1.0 - usedRatio))
+                    block.savedRemainingSeconds = max(0, newRemainingSeconds)
+                } else {
+                    // 如果旧持续时间为0，直接使用新持续时间
+                    block.savedRemainingSeconds = duration * 60
+                }
+            } else {
+                // 如果没有已保存的剩余时间，设置为新的持续时间
+                block.savedRemainingSeconds = duration * 60
+            }
         }
         
         if let type = type {
@@ -447,6 +470,9 @@ class TimeBlockManager: ObservableObject {
         if let color = color {
             block.color = color
         }
+        
+        // 打印调试信息
+        print("更新时间块: \(block.name), ID: \(block.id), 持续时间: \(block.duration)分钟, 剩余秒数: \(block.savedRemainingSeconds ?? 0)")
         
         timeBlocks[index] = block
         

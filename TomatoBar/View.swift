@@ -9,90 +9,97 @@ extension KeyboardShortcuts.Name {
 // 时间块行组件 - 显示单个时间块
 private struct TimeBlockRow: View {
     var timeBlock: TimeBlock
-    var isActive: Bool
-    var currentState: TimeBlockState  // 添加当前状态属性
-    var remainingSeconds: Int?  // 添加剩余时间参数
+    var currentState: TimeBlockState
+    var remainingSeconds: Int?
     var onTap: () -> Void
     var onEdit: () -> Void
     var onDelete: () -> Void
     var onManageReminders: () -> Void
-    var onPauseResume: () -> Void    // 保留回调但不再使用专门的按钮
+    var onPauseResume: () -> Void
     
-    @State private var showContextMenu = false
     @State private var isHovering = false
+    
+    var isActive: Bool {
+        timeBlock.isActive
+    }
     
     var body: some View {
         HStack {
-            // 左侧颜色条
-            RoundedRectangle(cornerRadius: 4)
+            // 时间块颜色指示器
+            Circle()
                 .fill(timeBlock.color.toColor())
-                .frame(width: 4)
+                .frame(width: 12, height: 12)
             
-            // 主要内容区域
+            // 时间块信息
             VStack(alignment: .leading, spacing: 4) {
-                // 第一行：名称和状态指示器
-                HStack(alignment: .center, spacing: 6) {
+                HStack {
+                    // 时间块名称
                     Text(timeBlock.name)
-                        .fontWeight(.medium)
+                        .fontWeight(isActive ? .bold : .regular)
+                        .foregroundColor(isActive ? .primary : .secondary)
                     
-                    // 如果正在运行，显示状态指示器
-                    if isActive {
-                        Circle()
-                            .fill(currentState == .active ? Color.green : Color.orange)
-                            .frame(width: 6, height: 6)
-                            .padding(.top, 1) // 微调位置对齐
+                    Spacer()
+                    
+                    // 显示时间信息（活动状态显示剩余时间，非活动状态显示总时长）
+                    HStack(spacing: 4) {
+                        Image(systemName: isActive ? "timer" : "clock")
+                            .font(.caption2)
+                            .foregroundColor(isActive ? (currentState == .active ? .green : .orange) : .secondary)
+                        
+                        // 修改逻辑：先检查是否有剩余时间，如果有就显示，无论是否是活动时间块
+                        if let seconds = remainingSeconds {
+                            Text(formatRemainingTime(seconds))
+                                .font(.system(.caption, design: .monospaced))
+                                .foregroundColor(isActive ? (currentState == .active ? .green : .orange) : .blue)
+                                .fontWeight(.medium)
+                        } else {
+                            // 如果没有剩余时间，显示总时长
+                            let formattedDuration = formatDuration(timeBlock.duration)
+                            Text(formattedDuration)
+                                .font(.system(.caption, design: .monospaced))
+                                .foregroundColor(.secondary)
+                        }
                     }
                 }
                 
-                // 显示时间信息（活动状态显示剩余时间，非活动状态显示总时长）
-                HStack(spacing: 4) {
-                    Image(systemName: isActive ? "timer" : "clock")
+                // 时间块类型标签
+                HStack(spacing: 8) {
+                    Text(timeBlock.type.name())
                         .font(.caption2)
-                        .foregroundColor(isActive ? (currentState == .active ? .green : .orange) : .secondary)
+                        .foregroundColor(.secondary)
+                        .padding(.horizontal, 6)
+                        .padding(.vertical, 2)
+                        .background(Color.secondary.opacity(0.1))
+                        .cornerRadius(4)
                     
-                    // 修改逻辑：先检查是否有剩余时间，如果有就显示，无论是否是活动时间块
-                    if let seconds = remainingSeconds {
-                        Text(formatRemainingTime(seconds))
-                            .font(.system(.caption, design: .monospaced))
-                            .foregroundColor(isActive ? (currentState == .active ? .green : .orange) : .blue)
-                            .fontWeight(.medium)
-                    } else {
-                        // 只有在没有剩余时间数据时才显示总时长
-                        Text(formatDuration(timeBlock.duration))
-                            .font(.caption)
-                            .foregroundColor(.secondary)
+                    // 如果有提醒，显示提醒图标
+                    if !timeBlock.reminders.isEmpty {
+                        HStack(spacing: 2) {
+                            Image(systemName: "bell.fill")
+                                .font(.caption2)
+                            Text("\(timeBlock.reminders.count)")
+                                .font(.caption2)
+                        }
+                        .foregroundColor(.secondary)
+                    }
+                    
+                    Spacer()
+                    
+                    // 如果是当前活动的时间块，显示状态指示器
+                    if isActive {
+                        StatusIndicatorView(status: currentState)
                     }
                 }
             }
-            .padding(.leading, 4)
             
-            Spacer()
-            
-            // 右侧信息和按钮区域
-            HStack(spacing: 8) {
-                // 类型标签
-                Text(timeBlock.type.name())
-                    .font(.caption)
-                    .padding(.horizontal, 6)
-                    .padding(.vertical, 2)
-                    .background(
-                        RoundedRectangle(cornerRadius: 4)
-                            .fill(Color.secondary.opacity(0.2))
-                    )
-                
-                // 提醒标记（如果有提醒）
-                if !timeBlock.reminders.isEmpty {
-                    Image(systemName: "bell.fill")
-                        .font(.caption)
-                        .foregroundColor(.orange)
-                }
-                
-                // 操作按钮组 - 鼠标悬停时显示
-                HStack(spacing: 8) {               
+            // 操作按钮（鼠标悬停时显示）
+            if isHovering {
+                HStack(spacing: 8) {
                     // 编辑按钮
                     Button(action: onEdit) {
                         Image(systemName: "pencil")
                             .font(.caption)
+                            .foregroundColor(.secondary)
                     }
                     .buttonStyle(.plain)
                     
@@ -100,48 +107,27 @@ private struct TimeBlockRow: View {
                     Button(action: onDelete) {
                         Image(systemName: "trash")
                             .font(.caption)
-                            .foregroundColor(.red)
+                            .foregroundColor(.secondary)
+                    }
+                    .buttonStyle(.plain)
+                    
+                    // 提醒管理按钮
+                    Button(action: onManageReminders) {
+                        Image(systemName: "bell")
+                            .font(.caption)
+                            .foregroundColor(.secondary)
                     }
                     .buttonStyle(.plain)
                 }
-                .opacity(isHovering ? 1.0 : 0.0)
+                .padding(.leading, 8)
             }
         }
-        .padding(8)
-        .background(
-            RoundedRectangle(cornerRadius: 8)
-                .fill(isActive ? Color.accentColor.opacity(0.1) : Color.clear)
-        )
         .contentShape(Rectangle())
-        .onHover { hovering in
-            isHovering = hovering
-        }
         .onTapGesture(perform: onTap)
-        .contextMenu {
-            Button(action: onEdit) {
-                Label("编辑", systemImage: "pencil")
-            }
-            
-            Button(action: onManageReminders) {
-                Label("管理提醒", systemImage: "bell")
-            }
-            
-            Button(role: .destructive, action: onDelete) {
-                Label("删除", systemImage: "trash")
-            }
+        .onHover { isHovering in
+            self.isHovering = isHovering
         }
-    }
-    
-    // 格式化时长显示
-    private func formatDuration(_ minutes: Int) -> String {
-        let hours = minutes / 60
-        let remainingMinutes = minutes % 60
-        
-        if hours > 0 {
-            return "\(hours)小时 \(remainingMinutes)分钟"
-        } else {
-            return "\(minutes)分钟"
-        }
+        .padding(.vertical, 4)
     }
     
     // 格式化剩余时间显示
@@ -156,12 +142,24 @@ private struct TimeBlockRow: View {
             return String(format: "%02d:%02d", minutes, secs)
         }
     }
+    
+    // 格式化持续时间显示
+    private func formatDuration(_ minutes: Int) -> String {
+        let hours = minutes / 60
+        let mins = minutes % 60
+        
+        if hours > 0 {
+            return String(format: "%d:%02d:00", hours, mins)
+        } else {
+            return String(format: "%02d:00", mins)
+        }
+    }
 }
 
 // 时间块编辑视图
 private struct TimeBlockEditView: View {
     @Binding var timeBlock: TimeBlock
-    var onSave: () -> Void
+    var onSave: (Int, Int) -> Void
     var onCancel: () -> Void
     
     // 添加小时和分钟的状态变量
@@ -169,18 +167,35 @@ private struct TimeBlockEditView: View {
     @State private var minutes: Int = 0
     
     // 初始化函数
-    init(timeBlock: Binding<TimeBlock>, onSave: @escaping () -> Void, onCancel: @escaping () -> Void) {
+    init(timeBlock: Binding<TimeBlock>, onSave: @escaping (Int, Int) -> Void, onCancel: @escaping () -> Void) {
         self._timeBlock = timeBlock
         self.onSave = onSave
         self.onCancel = onCancel
         
-        // 从timeBlock.duration转换为小时和分钟
-        let totalMinutes = timeBlock.wrappedValue.duration
-        let initialHours = totalMinutes / 60
-        let initialMinutes = totalMinutes % 60
-        
-        self._hours = State(initialValue: initialHours)
-        self._minutes = State(initialValue: initialMinutes)
+        // 首先检查是否有已保存的剩余时间
+        if let savedSeconds = timeBlock.wrappedValue.savedRemainingSeconds {
+            // 如果有已保存的剩余时间，使用它来初始化小时和分钟
+            let totalSeconds = savedSeconds
+            let initialHours = totalSeconds / 3600
+            let initialMinutes = (totalSeconds % 3600) / 60
+            
+            // 打印调试信息
+            print("使用已保存的剩余时间初始化: \(savedSeconds)秒, \(initialHours)小时 \(initialMinutes)分钟")
+            
+            self._hours = State(initialValue: initialHours)
+            self._minutes = State(initialValue: initialMinutes)
+        } else {
+            // 没有已保存的剩余时间，使用持续时间（分钟）
+            let totalMinutes = timeBlock.wrappedValue.duration
+            let initialHours = totalMinutes / 60
+            let initialMinutes = totalMinutes % 60
+            
+            // 打印调试信息
+            print("使用持续时间初始化: \(totalMinutes)分钟, \(initialHours)小时 \(initialMinutes)分钟")
+            
+            self._hours = State(initialValue: initialHours)
+            self._minutes = State(initialValue: initialMinutes)
+        }
     }
     
     var body: some View {
@@ -284,8 +299,12 @@ private struct TimeBlockEditView: View {
                 
                 Spacer()
                 
-                Button("保存", action: onSave)
-                    .keyboardShortcut(.defaultAction)
+                Button("保存") {
+                    // 确保在保存前更新时间块的持续时间
+                    updateTimeBlockDuration()
+                    onSave(hours, minutes)
+                }
+                .keyboardShortcut(.defaultAction)
             }
             .padding(.top, 8)
         }
@@ -298,6 +317,13 @@ private struct TimeBlockEditView: View {
         // 将小时和分钟合并为总分钟数
         let totalMinutes = hours * 60 + minutes
         timeBlock.duration = totalMinutes
+        
+        // 同时更新 savedRemainingSeconds 为对应的秒数
+        let totalSeconds = hours * 3600 + minutes * 60
+        timeBlock.savedRemainingSeconds = totalSeconds
+        
+        // 打印调试信息
+        print("更新时间块持续时间: \(totalMinutes)分钟, 转换为: \(totalSeconds)秒")
     }
     
     // 格式化时间显示
@@ -480,7 +506,6 @@ private struct TimeBlocksView: View {
                 ForEach(timer.timeBlockManager.timeBlocks) { block in
                     TimeBlockRow(
                         timeBlock: block,
-                        isActive: timer.timeBlockManager.currentBlockIndex == timer.timeBlockManager.timeBlocks.firstIndex(where: { $0.id == block.id }),
                         currentState: timer.timeBlockManager.currentState,
                         remainingSeconds: timer.timeBlockManager.getRemainingSeconds(for: block.id),
                         onTap: {
@@ -598,25 +623,53 @@ private struct TimeBlocksView: View {
         .sheet(isPresented: $isEditing) {
             TimeBlockEditView(
                 timeBlock: $editingBlock,
-                onSave: {
+                onSave: { hours, minutes in
+                    // 计算新的总分钟数和总秒数
+                    let totalMinutes = hours * 60 + minutes
+                    let totalSeconds = hours * 3600 + minutes * 60
+                    
                     if isAddingNew {
                         // 添加新时间块
-                        timer.timeBlockManager.addTimeBlock(
+                        var newBlock = TimeBlock(
                             name: editingBlock.name,
-                            duration: editingBlock.duration,
+                            duration: totalMinutes,
                             type: editingBlock.type,
                             color: editingBlock.color
                         )
+                        newBlock.savedRemainingSeconds = totalSeconds
+                        
+                        // 添加新时间块
+                        timer.timeBlockManager.timeBlocks.append(newBlock)
+                        timer.timeBlockManager.saveTimeBlocks()
                     } else {
-                        // 更新时间块
-                        timer.timeBlockManager.updateTimeBlock(
-                            id: editingBlock.id,
-                            name: editingBlock.name,
-                            duration: editingBlock.duration,
-                            type: editingBlock.type,
-                            color: editingBlock.color
-                        )
+                        // 更新现有时间块
+                        if let index = timer.timeBlockManager.timeBlocks.firstIndex(where: { $0.id == editingBlock.id }) {
+                            var updatedBlock = timer.timeBlockManager.timeBlocks[index]
+                            
+                            // 手动更新时间块的 duration 和 savedRemainingSeconds
+                            updatedBlock.duration = totalMinutes
+                            updatedBlock.savedRemainingSeconds = totalSeconds
+                            updatedBlock.name = editingBlock.name
+                            updatedBlock.type = editingBlock.type
+                            updatedBlock.color = editingBlock.color
+                            
+                            // 将更新后的时间块放回数组中
+                            timer.timeBlockManager.timeBlocks[index] = updatedBlock
+                            
+                            // 如果这是当前活动的时间块，更新 remainingSeconds
+                            if timer.timeBlockManager.currentBlockIndex == index {
+                                timer.timeBlockManager.remainingSeconds = totalSeconds
+                                timer.updateTimeLeft()
+                            }
+                        }
+                        
+                        // 保存更改
+                        timer.timeBlockManager.saveTimeBlocks()
                     }
+                    
+                    // 重要：手动触发对象变更通知，确保 UI 更新
+                    timer.timeBlockManager.objectWillChange.send()
+                    
                     isEditing = false
                     isAddingNew = false
                 },
@@ -1192,7 +1245,6 @@ struct TBPopoverView: View {
                         ForEach(timer.timeBlockManager.timeBlocks.indices, id: \.self) { index in
                             TimeBlockRow(
                                 timeBlock: timer.timeBlockManager.timeBlocks[index],
-                                isActive: timer.timeBlockManager.currentBlockIndex == index,
                                 currentState: timer.timeBlockManager.currentState,
                                 remainingSeconds: timer.timeBlockManager.getRemainingSeconds(for: timer.timeBlockManager.timeBlocks[index].id),
                                 onTap: {
@@ -1313,14 +1365,29 @@ struct TBPopoverView: View {
         .sheet(isPresented: $showAddTimeBlockSheet) {
             TimeBlockEditView(
                 timeBlock: $newTimeBlock,
-                onSave: {
-                    // 添加新的时间块
-                    timer.timeBlockManager.addTimeBlock(
+                onSave: { hours, minutes in
+                    // 计算新的总分钟数和总秒数
+                    let totalMinutes = hours * 60 + minutes
+                    let totalSeconds = hours * 3600 + minutes * 60
+                    
+                    // 创建新时间块并设置属性
+                    var block = TimeBlock(
                         name: newTimeBlock.name,
-                        duration: newTimeBlock.duration,
+                        duration: totalMinutes,
                         type: newTimeBlock.type,
                         color: newTimeBlock.color
                     )
+                    block.savedRemainingSeconds = totalSeconds
+                    
+                    // 添加到时间块管理器
+                    timer.timeBlockManager.timeBlocks.append(block)
+                    
+                    // 保存更改
+                    timer.timeBlockManager.saveTimeBlocks()
+                    
+                    // 重要：手动触发对象变更通知，确保 UI 更新
+                    timer.timeBlockManager.objectWillChange.send()
+                    
                     showAddTimeBlockSheet = false
                 },
                 onCancel: {
@@ -1337,17 +1404,41 @@ struct TBPopoverView: View {
                         editingTimeBlock = newValue
                     }
                 ),
-                onSave: {
-                    // 更新时间块
-                    if let block = editingTimeBlock {
-                        timer.timeBlockManager.updateTimeBlock(
-                            id: block.id,
-                            name: block.name,
-                            duration: block.duration,
-                            type: block.type,
-                            color: block.color
-                        )
+                onSave: { hours, minutes in
+                    // 计算新的总分钟数和总秒数
+                    let totalMinutes = hours * 60 + minutes
+                    let totalSeconds = hours * 3600 + minutes * 60
+                    
+                    // 查找原始时间块
+                    if let index = timer.timeBlockManager.timeBlocks.firstIndex(where: { $0.id == timeBlock.id }) {
+                        var updatedBlock = timer.timeBlockManager.timeBlocks[index]
+                        
+                        // 更新时间块的所有属性
+                        updatedBlock.duration = totalMinutes
+                        updatedBlock.savedRemainingSeconds = totalSeconds
+                        updatedBlock.name = timeBlock.name
+                        updatedBlock.type = timeBlock.type
+                        updatedBlock.color = timeBlock.color
+                        
+                        // 将更新后的时间块放回数组中
+                        timer.timeBlockManager.timeBlocks[index] = updatedBlock
+                        
+                        // 如果这是当前活动的时间块，更新 remainingSeconds
+                        if timer.timeBlockManager.currentBlockIndex == index {
+                            timer.timeBlockManager.remainingSeconds = totalSeconds
+                            timer.updateTimeLeft()
+                        }
+                        
+                        // 保存更改
+                        timer.timeBlockManager.saveTimeBlocks()
+                        
+                        // 手动触发 UI 更新
+                        timer.timeBlockManager.objectWillChange.send()
+                        
+                        // 打印调试信息
+                        print("已更新时间块: ID=\(timeBlock.id), 名称=\(updatedBlock.name), 持续时间=\(totalMinutes)分钟, 剩余秒数=\(totalSeconds)")
                     }
+                    
                     editingTimeBlock = nil
                 },
                 onCancel: {
