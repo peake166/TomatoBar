@@ -50,13 +50,14 @@ private struct TimeBlockRow: View {
                         .font(.caption2)
                         .foregroundColor(isActive ? (currentState == .active ? .green : .orange) : .secondary)
                     
-                    // 如果是活动状态且有剩余时间，显示剩余时间；否则显示总时长
-                    if isActive, let seconds = remainingSeconds {
+                    // 修改逻辑：先检查是否有剩余时间，如果有就显示，无论是否是活动时间块
+                    if let seconds = remainingSeconds {
                         Text(formatRemainingTime(seconds))
                             .font(.system(.caption, design: .monospaced))
-                            .foregroundColor(currentState == .active ? .green : .orange)
+                            .foregroundColor(isActive ? (currentState == .active ? .green : .orange) : .blue)
                             .fontWeight(.medium)
                     } else {
+                        // 只有在没有剩余时间数据时才显示总时长
                         Text(formatDuration(timeBlock.duration))
                             .font(.caption)
                             .foregroundColor(.secondary)
@@ -661,11 +662,6 @@ private struct SettingsView: View {
                                        comment: "Shortcut label"))
                     .frame(maxWidth: .infinity, alignment: .leading)
             }
-            Toggle(isOn: $settings.stopAfterBreak) {
-                Text(NSLocalizedString("SettingsView.stopAfterBreak.label",
-                                       comment: "Stop after break label"))
-                    .frame(maxWidth: .infinity, alignment: .leading)
-            }.toggleStyle(.switch)
             Toggle(isOn: $settings.showTimerInMenuBar) {
                 Text(NSLocalizedString("SettingsView.showTimerInMenuBar.label",
                                        comment: "Show timer in menu bar label"))

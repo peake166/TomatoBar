@@ -263,8 +263,15 @@ class TimeBlockManager: ObservableObject {
         
         // 更新时间块状态
         var block = timeBlocks[index]
+        
+        // 保存剩余时间数据
+        block.savedRemainingSeconds = remainingSeconds
+        
         block.isActive = false
         timeBlocks[index] = block
+        
+        // 保存更改
+        saveTimeBlocks()
         
         // 处理完成后的逻辑
         if block.type == .work {
@@ -285,7 +292,16 @@ class TimeBlockManager: ObservableObject {
     
     // 跳过当前时间块
     func skipCurrentTimeBlock() {
-        guard currentBlockIndex != nil else { return }
+        guard let index = currentBlockIndex else { return }
+        
+        // 保存当前剩余时间
+        var block = timeBlocks[index]
+        block.savedRemainingSeconds = remainingSeconds
+        block.isActive = false
+        timeBlocks[index] = block
+        
+        // 保存更改
+        saveTimeBlocks()
         
         // 触发状态转换
         stateMachine <-! .skip
@@ -296,11 +312,24 @@ class TimeBlockManager: ObservableObject {
     
     // 重置所有状态
     func reset() {
-        // 重置当前索引
+        // 重置当前索引，但保留剩余时间数据
         if let index = currentBlockIndex {
             var block = timeBlocks[index]
+            
+            // 保存剩余时间，确保它不会丢失
+            if block.savedRemainingSeconds == nil || block.savedRemainingSeconds != remainingSeconds {
+                // 只有当剩余时间与已保存的不同时才更新
+                block.savedRemainingSeconds = remainingSeconds
+            }
+            
+            // 设置为非活动状态
             block.isActive = false
+            
+            // 更新时间块
             timeBlocks[index] = block
+            
+            // 保存更改
+            saveTimeBlocks()
         }
         
         currentBlockIndex = nil
@@ -321,9 +350,25 @@ class TimeBlockManager: ObservableObject {
             checkReminders()
         }
         
-        // 如果时间到了，自动完成
+        // 如果时间到了，暂停而不是自动完成
         if remainingSeconds <= 0 {
-            finishCurrentTimeBlock()
+            // 保存当前状态
+            if let index = currentBlockIndex {
+                var block = timeBlocks[index]
+                block.savedRemainingSeconds = 0
+                timeBlocks[index] = block
+            }
+            
+            // 创建完成通知
+            // 但不自动结束，只是暂停，让用户决定下一步操作
+            NotificationCenter.default.post(
+                name: Notification.Name("TimeBlockTimeUpEvent"),
+                object: nil,
+                userInfo: ["timeBlockIndex": currentBlockIndex as Any]
+            )
+            
+            // 触发暂停状态转换
+            stateMachine <-! .pause
         }
     }
     

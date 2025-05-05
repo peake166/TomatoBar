@@ -42,6 +42,9 @@ class TBTimer: ObservableObject {
         
         // 设置时间块提醒观察器
         setupReminderObserver()
+        
+        // 注册时间块到时事件观察器
+        setupTimeUpObserver()
     }
     
     // 设置提醒观察器
@@ -71,6 +74,38 @@ class TBTimer: ObservableObject {
         // 如果启用了声音，播放提醒音效
         if reminder.soundEnabled {
             player.playDing()
+        }
+    }
+    
+    // 设置时间到时观察器
+    private func setupTimeUpObserver() {
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(handleTimeBlockTimeUp(_:)),
+            name: Notification.Name("TimeBlockTimeUpEvent"),
+            object: nil
+        )
+    }
+    
+    // 处理时间块到时事件
+    @objc private func handleTimeBlockTimeUp(_ notification: Foundation.Notification) {
+        // 播放完成音效
+        player.playDing()
+        
+        // 停止滴答声
+        player.stopTicking()
+        
+        // 获取当前时间块信息
+        if let currentBlock = timeBlockManager.currentTimeBlock {
+            // 发送通知
+            notificationCenter.send(
+                title: "时间到了",
+                body: "\(currentBlock.name) 时间已到，请选择下一步操作。",
+                category: .timeBlockFinished
+            )
+            
+            // 更新菜单栏图标显示暂停状态
+            updateMenuBarIcon()
         }
     }
     
@@ -369,9 +404,6 @@ class TBTimer: ObservableObject {
     // 跳过当前时间块
     func skipCurrentTimeBlock() {
         if let currentBlock = timeBlockManager.currentTimeBlock {
-            // 记录当前类型
-            let currentType = currentBlock.type
-            
             // 完成当前时间块
             timeBlockManager.finishCurrentTimeBlock()
             
@@ -383,25 +415,16 @@ class TBTimer: ObservableObject {
                 stopTimer()
             }
             
-            // 如果跳过的是工作时间块，自动开始短休息
-            if currentType == .work {
-                // 找到短休息时间块索引
-                if let breakIndex = timeBlockManager.timeBlocks.firstIndex(where: { $0.type == .shortBreak }) {
-                    startTimeBlock(index: breakIndex)
-                }
-            }
-            // 如果跳过的是休息时间块，自动开始工作
-            else if currentType == .shortBreak || currentType == .longBreak {
-                // 如果需要停止，直接停止
-                if settings.stopAfterBreak {
-                    stopCurrentTimeBlock()
-                } else {
-                    // 找到工作时间块索引
-                    if let workIndex = timeBlockManager.timeBlocks.firstIndex(where: { $0.type == .work }) {
-                        startTimeBlock(index: workIndex)
-                    }
-                }
-            }
+            // 发送通知
+            notificationCenter.send(
+                title: "时间块已跳过",
+                body: "\(currentBlock.name) 已跳过，请选择下一个时间块。",
+                category: .timeBlockFinished
+            )
+            
+            // 设置为空闲图标
+            TBStatusItem.shared.setIcon(name: .idle)
+            TBStatusItem.shared.setTitle(title: nil)
         }
     }
 
@@ -503,82 +526,17 @@ class TBTimer: ObservableObject {
                 
                 // 取消所有待处理的通知
                 notificationCenter.cancelAllPendingNotifications()
-            }
-            
-            // 取得刚刚完成的时间块类型
-            if let lastCompletedBlockType = getLastCompletedBlockType() {
-                // 根据完成的时间块类型决定下一步操作
-                if lastCompletedBlockType == .work {
-                    // 工作完成后，开始休息
-                    startRestAfterWork()
-                } else {
-                    // 休息完成后，根据设置决定是否自动开始工作
-                    handleRestFinished()
-                }
+                
+                // 发送通知告知用户时间块已完成
+                notificationCenter.send(
+                    title: "时间块已完成",
+                    body: "\(completedBlock.name) 已完成，请选择下一个时间块。",
+                    category: .timeBlockFinished
+                )
             }
         }
     }
     
-    // 获取刚完成的时间块类型（通过分析状态）
-    private func getLastCompletedBlockType() -> TimeBlockType? {
-        // 查看是否需要长休息
-        if timeBlockManager.isNextBreakLong {
-            return .work
-        } 
-        // 如果刚完成了工作时间块
-        else if timeBlockManager.completedWorkBlocks > 0 {
-            return .work
-        }
-        // 如果刚完成了休息时间块
-        else {
-            return .shortBreak
-        }
-    }
-    
-    // 工作完成后开始休息
-    private func startRestAfterWork() {
-        // 发送工作完成通知
-        notificationCenter.send(
-            title: NSLocalizedString("TBTimer.onRestStart.title", comment: "Time's up title"),
-            body: timeBlockManager.isNextBreakLong 
-                  ? NSLocalizedString("TBTimer.onRestStart.long.body", comment: "Long break body")
-                  : NSLocalizedString("TBTimer.onRestStart.short.body", comment: "Short break body"),
-            category: .restStarted
-        )
-        
-        // 查找并启动适当的休息时间块
-        let restType: TimeBlockType = timeBlockManager.isNextBreakLong ? .longBreak : .shortBreak
-        if let restIndex = timeBlockManager.timeBlocks.firstIndex(where: { $0.type == restType }) {
-            startTimeBlock(index: restIndex)
-        }
-    }
-    
-    // 处理休息完成
-    private func handleRestFinished() {
-        // 发送休息完成通知
-        notificationCenter.send(
-            title: NSLocalizedString("TBTimer.onRestFinish.title", comment: "Break is over title"),
-            body: NSLocalizedString("TBTimer.onRestFinish.body", comment: "Break is over body"),
-            category: .restFinished
-        )
-        
-        // 根据设置决定是否自动开始工作
-        if !settings.stopAfterBreak {
-            // 查找工作时间块
-            if let workIndex = timeBlockManager.timeBlocks.firstIndex(where: { $0.type == .work }) {
-                startTimeBlock(index: workIndex)
-            }
-        } else {
-            // 停止计时器
-            if timer != nil {
-                stopTimer()
-            }
-            
-            // 设置为空闲图标
-            TBStatusItem.shared.setIcon(name: .idle)
-        }
-    }
-
     // 计时器取消事件
     private func onTimerCancel() {
         DispatchQueue.main.async { [self] in
