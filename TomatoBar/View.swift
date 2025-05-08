@@ -444,6 +444,9 @@ private struct TimeBlocksView: View {
     
     var body: some View {
         VStack(spacing: 10) {
+            // 添加今日工作目标时间组件
+            TodayWorkTargetView(timeBlockManager: timer.timeBlockManager)
+            
             // 状态指示
             if let currentBlock = timer.timeBlockManager.currentTimeBlock {
                 HStack {
@@ -1183,6 +1186,325 @@ private struct ReminderEditView: View {
     }
 }
 
+// 今日工作目标时间组件
+struct TodayWorkTargetView: View {
+    @ObservedObject var timeBlockManager: TimeBlockManager
+    
+    var body: some View {
+        HStack {
+            Image(systemName: "target")
+                .foregroundColor(.blue)
+            
+            Text("今日工作目标")
+                .font(.subheadline)
+                .foregroundColor(.secondary)
+            
+            Spacer()
+            
+            Text(timeBlockManager.formattedTodayWorkTarget)
+                .font(.headline)
+                .foregroundColor(.blue)
+        }
+        .padding(.horizontal)
+        .padding(.vertical, 8)
+        .background(Color.blue.opacity(0.1))
+        .cornerRadius(8)
+        .padding(.horizontal)
+        .padding(.top, 8)
+    }
+}
+
+// 进度条组件（条形图）
+struct TimeBarView: View {
+    let title: String
+    let currentSeconds: Int
+    let maxHours: Int
+    let color: Color
+    
+    private var maxSeconds: Int {
+        return maxHours * 3600
+    }
+    
+    private var progress: Double {
+        let progress = Double(currentSeconds) / Double(maxSeconds)
+        return min(progress, 1.0) // 确保不超过1.0
+    }
+    
+    private var formattedTime: String {
+        let hours = currentSeconds / 3600
+        let minutes = (currentSeconds % 3600) / 60
+        
+        if hours > 0 {
+            return "\(hours):\(String(format: "%02d", minutes))"
+        } else {
+            return "\(minutes)分钟"
+        }
+    }
+    
+    var body: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            HStack {
+                Text(title)
+                    .font(.subheadline)
+                    .foregroundColor(.secondary)
+                
+                Spacer()
+                
+                Text(formattedTime)
+                    .font(.subheadline)
+                    .foregroundColor(color)
+            }
+            
+            // 进度条
+            GeometryReader { geo in
+                ZStack(alignment: .leading) {
+                    // 背景
+                    RoundedRectangle(cornerRadius: 4)
+                        .fill(Color.secondary.opacity(0.2))
+                        .frame(height: 8)
+                    
+                    // 进度
+                    RoundedRectangle(cornerRadius: 4)
+                        .fill(color)
+                        .frame(width: geo.size.width * progress, height: 8)
+                }
+            }
+            .frame(height: 8)
+            
+            // 最大时间标注
+            HStack {
+                Spacer()
+                Text("最大\(maxHours)小时")
+                    .font(.caption2)
+                    .foregroundColor(.secondary)
+            }
+        }
+    }
+}
+
+// 饼图数据模型
+struct PieSliceData: Identifiable {
+    var id: UUID
+    var value: Double
+    var color: Color
+    var name: String
+}
+
+// 饼图切片
+struct PieSlice: View {
+    var startAngle: Angle
+    var endAngle: Angle
+    var color: Color
+    
+    var body: some View {
+        GeometryReader { geo in
+            Path { path in
+                let center = CGPoint(x: geo.size.width / 2, y: geo.size.height / 2)
+                let radius = min(geo.size.width, geo.size.height) / 2
+                
+                path.move(to: center)
+                path.addArc(
+                    center: center,
+                    radius: radius,
+                    startAngle: startAngle,
+                    endAngle: endAngle,
+                    clockwise: false
+                )
+                path.closeSubpath()
+            }
+            .fill(color)
+        }
+    }
+}
+
+// 饼图组件
+struct PieChartView: View {
+    var data: [PieSliceData]
+    
+    private var totalValue: Double {
+        data.reduce(0) { $0 + $1.value }
+    }
+    
+    private func angle(for value: Double) -> Angle {
+        guard totalValue > 0 else { return .degrees(0) }
+        let fraction = value / totalValue
+        return .degrees(fraction * 360)
+    }
+    
+    private func startAngle(at index: Int) -> Angle {
+        if index == 0 { return .zero }
+        let sumOfPreviousValues = data[0..<index].reduce(0) { $0 + $1.value }
+        return angle(for: sumOfPreviousValues)
+    }
+    
+    private func endAngle(at index: Int) -> Angle {
+        startAngle(at: index) + angle(for: data[index].value)
+    }
+    
+    var body: some View {
+        GeometryReader { geo in
+            ZStack {
+                ForEach(0..<data.count, id: \.self) { index in
+                    PieSlice(
+                        startAngle: startAngle(at: index),
+                        endAngle: endAngle(at: index),
+                        color: data[index].color
+                    )
+                    .shadow(color: Color.black.opacity(0.1), radius: 1, x: 0, y: 1)
+                }
+                
+                // 中心红点
+                Circle()
+                    .fill(Color.red)
+                    .frame(width: max(geo.size.width * 0.1, 10), height: max(geo.size.height * 0.1, 10))
+            }
+        }
+        .aspectRatio(1, contentMode: .fit)
+    }
+}
+
+// 时间统计视图
+struct TimeStatsView: View {
+    @ObservedObject var timeBlockManager: TimeBlockManager
+    
+    var body: some View {
+        ScrollView {
+            VStack(spacing: 20) {
+                // 添加今日工作目标
+                TodayWorkTargetView(timeBlockManager: timeBlockManager)
+                
+                // 今日统计区域
+                todayStatsSection
+                
+                Divider()
+                
+                // 历史统计区域
+                historicalStatsSection
+            }
+            .padding()
+        }
+    }
+    
+    // 今日统计部分
+    private var todayStatsSection: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text("今日时间统计")
+                .font(.headline)
+            
+            // 工作时间条形图
+            TimeBarView(
+                title: "工作时间",
+                currentSeconds: timeBlockManager.dailyStats.workTimeSeconds,
+                maxHours: 14,
+                color: .blue
+            )
+            
+            // 休息时间条形图
+            TimeBarView(
+                title: "休息时间",
+                currentSeconds: timeBlockManager.dailyStats.breakTimeSeconds,
+                maxHours: 10,
+                color: .green
+            )
+            
+            // 显示具体数值
+            HStack {
+                Spacer()
+                VStack(alignment: .trailing) {
+                    Text("工作: \(formatTime(timeBlockManager.dailyStats.workTimeSeconds))")
+                    Text("休息: \(formatTime(timeBlockManager.dailyStats.breakTimeSeconds))")
+                }
+                .font(.caption)
+                .foregroundColor(.secondary)
+            }
+        }
+    }
+    
+    // 历史统计部分
+    private var historicalStatsSection: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text("历史时间统计")
+                .font(.headline)
+            
+            if timeBlockManager.historicalStats.totalSeconds > 0 {
+                PieChartView(data: prepareChartData())
+                    .frame(height: 200)
+                    .padding(.bottom, 10) // 饼图和总时间之间的间距
+                
+                // 总使用时间
+                HStack {
+                    Text("总使用时间:")
+                        .font(.subheadline)
+                        .foregroundColor(.secondary)
+                    Spacer()
+                    Text(formatTime(timeBlockManager.historicalStats.totalSeconds))
+                        .font(.subheadline)
+                        .fontWeight(.medium)
+                }
+                .padding(.bottom, 10) // 总时间和图例之间的间距
+                
+                // 图例
+                VStack(alignment: .leading, spacing: 5) {
+                    ForEach(prepareChartData()) { sliceData in
+                        HStack {
+                            Circle()
+                                .fill(sliceData.color)
+                                .frame(width: 10, height: 10)
+                            Text(sliceData.name)
+                                .font(.caption)
+                            Spacer()
+                            Text("\(formatTime(Int(sliceData.value))) - \(calculatePercentageString(sliceValue: sliceData.value))%")
+                                .font(.caption)
+                                .foregroundColor(.secondary)
+                        }
+                    }
+                }
+                
+            } else {
+                Text("暂无历史数据")
+                    .foregroundColor(.secondary)
+                    .frame(maxWidth: .infinity, alignment: .center)
+                    .padding()
+            }
+        }
+    }
+    
+    // 准备饼图数据
+    private func prepareChartData() -> [PieSliceData] {
+        // 注意：现在 value 将直接是秒数，而不是百分比，百分比在图例中动态计算
+        return timeBlockManager.timeBlocks.compactMap { block in
+            guard let usageSeconds = timeBlockManager.historicalStats.timeBlockUsage[block.id], usageSeconds > 0 else { return nil }
+            return PieSliceData(
+                id: block.id,
+                value: Double(usageSeconds),
+                color: block.color.toColor(),
+                name: block.name
+            )
+        }
+    }
+    
+    private func calculatePercentageString(sliceValue: Double) -> String {
+        let total = Double(timeBlockManager.historicalStats.totalSeconds)
+        guard total > 0 else { return "0" }
+        let percentage = (sliceValue / total) * 100
+        return String(format: "%.1f", percentage)
+    }
+    
+    // 格式化时间
+    private func formatTime(_ seconds: Int) -> String {
+        let hours = seconds / 3600
+        let minutes = (seconds % 3600) / 60
+        
+        if hours > 0 {
+            return "\(hours)小时\(minutes)分钟"
+        } else if minutes > 0 {
+            return "\(minutes)分钟"
+        } else {
+            return "\(seconds)秒"
+        }
+    }
+}
+
 // 主视图
 struct TBPopoverView: View {
     @ObservedObject var timer = TBTimer()
@@ -1205,6 +1527,7 @@ struct TBPopoverView: View {
             // 视图选择器
             Picker("视图", selection: $viewSelection) {
                 Text("时间块").tag("timeblocks")
+                Text("时间统计").tag("stats")
                 Text("设置").tag("settings")
             }
             .pickerStyle(.segmented)
@@ -1218,6 +1541,9 @@ struct TBPopoverView: View {
             if viewSelection == "timeblocks" {
                 // 时间块列表
                 ScrollView {
+                    // 添加今日工作目标时间组件
+                    TodayWorkTargetView(timeBlockManager: timer.timeBlockManager)
+                    
                     // 添加刷新操作按钮
                     HStack {
                         Button(action: {
@@ -1334,6 +1660,9 @@ struct TBPopoverView: View {
                     .controlSize(.large)
                     .padding()
                 }
+            } else if viewSelection == "stats" {
+                // 时间统计视图
+                TimeStatsView(timeBlockManager: timer.timeBlockManager)
             } else if viewSelection == "settings" {
                 // 设置视图
                 VStack(spacing: 0) {

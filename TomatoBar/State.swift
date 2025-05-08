@@ -105,6 +105,26 @@ class TimeBlockManager: ObservableObject {
     // 用于跟踪已触发的提醒
     private var triggeredReminders: Set<UUID> = []
     
+    // 今日统计数据
+    @Published var dailyStats: DailyTimeStats = DailyTimeStats(date: Date())
+    
+    // 历史统计数据
+    @Published var historicalStats: HistoricalTimeStats = HistoricalTimeStats()
+    
+    // 计算今日工作目标总时间（分钟）
+    var todayWorkTargetMinutes: Int {
+        return timeBlocks
+            .filter { $0.type == .work }
+            .reduce(0) { $0 + $1.duration }
+    }
+    
+    // 格式化显示（小时:分钟）
+    var formattedTodayWorkTarget: String {
+        let hours = todayWorkTargetMinutes / 60
+        let minutes = todayWorkTargetMinutes % 60
+        return String(format: "%d:%02d", hours, minutes)
+    }
+    
     // 持久化存储的文件URL
     private var timeBlocksFileURL: URL? {
         let fileManager = FileManager.default
@@ -125,6 +145,23 @@ class TimeBlockManager: ObservableObject {
     
     // 用于存储订阅的集合
     private var cancellables = Set<AnyCancellable>()
+    
+    // 统计数据文件URL
+    private var dailyStatsFileURL: URL? {
+        let fileManager = FileManager.default
+        guard let documentDirectory = fileManager.urls(for: .documentDirectory, in: .userDomainMask).first else {
+            return nil
+        }
+        return documentDirectory.appendingPathComponent("dailyStats.json")
+    }
+    
+    private var historicalStatsFileURL: URL? {
+        let fileManager = FileManager.default
+        guard let documentDirectory = fileManager.urls(for: .documentDirectory, in: .userDomainMask).first else {
+            return nil
+        }
+        return documentDirectory.appendingPathComponent("historicalStats.json")
+    }
     
     // 获取指定时间块的剩余秒数
     func getRemainingSeconds(for timeBlockId: UUID) -> Int? {
@@ -154,6 +191,9 @@ class TimeBlockManager: ObservableObject {
             stateMachine = TimeBlockStateMachine(state: .idle)
         }
         
+        // 加载统计数据
+        loadTimeStats()
+        
         // 设置状态机路由
         setupStateMachine()
         
@@ -169,6 +209,14 @@ class TimeBlockManager: ObservableObject {
             .sink { [weak self] _, _, _ in
                 self?.saveTimeBlocks()
                 self?.saveState()
+            }
+            .store(in: &cancellables)
+            
+        // 添加统计数据的自动保存
+        Publishers.CombineLatest($dailyStats, $historicalStats)
+            .debounce(for: .seconds(5.0), scheduler: RunLoop.main) // 使用更长的延迟，减少IO操作
+            .sink { [weak self] _, _ in
+                self?.saveTimeStats()
             }
             .store(in: &cancellables)
     }
@@ -345,6 +393,29 @@ class TimeBlockManager: ObservableObject {
         
         if remainingSeconds > 0 {
             remainingSeconds -= 1
+            
+            // 添加统计逻辑
+            if let currentBlock = currentTimeBlock {
+                // 检查并确保dailyStats是今天的数据
+                if !dailyStats.isToday() {
+                    dailyStats.reset()
+                }
+                
+                // 更新今日统计
+                if currentBlock.type == .work {
+                    dailyStats.workTimeSeconds += 1
+                } else {
+                    dailyStats.breakTimeSeconds += 1
+                }
+                
+                // 更新历史统计
+                historicalStats.updateUsage(blockId: currentBlock.id, seconds: 1)
+                
+                // 自动保存数据（考虑节流以避免频繁IO）
+                if remainingSeconds % 60 == 0 { // 每分钟保存一次
+                    saveTimeStats()
+                }
+            }
             
             // 检查是否需要触发提醒
             checkReminders()
@@ -672,11 +743,59 @@ class TimeBlockManager: ObservableObject {
             remainingSeconds = timeBlocks[currentIndex].duration * 60
         }
         
+        // 重置今日统计
+        dailyStats.reset()
+        
         // 保存更改
         saveTimeBlocks()
         saveState()
+        saveTimeStats()
         
         print("所有时间块已刷新")
+    }
+    
+    // 保存统计数据
+    func saveTimeStats() {
+        do {
+            let encoder = JSONEncoder()
+            
+            // 保存今日统计
+            if let url = dailyStatsFileURL {
+                let dailyData = try encoder.encode(dailyStats)
+                try dailyData.write(to: url)
+            }
+            
+            // 保存历史统计
+            if let url = historicalStatsFileURL {
+                let historicalData = try encoder.encode(historicalStats)
+                try historicalData.write(to: url)
+            }
+        } catch {
+            print("保存统计数据失败: \(error)")
+        }
+    }
+    
+    // 加载统计数据
+    func loadTimeStats() {
+        let decoder = JSONDecoder()
+        
+        // 加载今日统计
+        if let url = dailyStatsFileURL,
+           let data = try? Data(contentsOf: url),
+           let loadedStats = try? decoder.decode(DailyTimeStats.self, from: data) {
+            dailyStats = loadedStats
+            // 如果不是今天的数据，重置
+            if !dailyStats.isToday() {
+                dailyStats.reset()
+            }
+        }
+        
+        // 加载历史统计
+        if let url = historicalStatsFileURL,
+           let data = try? Data(contentsOf: url),
+           let loadedStats = try? decoder.decode(HistoricalTimeStats.self, from: data) {
+            historicalStats = loadedStats
+        }
     }
 }
 
@@ -924,5 +1043,53 @@ extension TimeBlockManager {
         
         // 将时间块设置保存到AppSettings
         settings.saveTimeBlocksToSettings(timeBlocks: timeBlocks)
+    }
+}
+
+// 今日统计数据结构
+struct DailyTimeStats: Codable {
+    var date: Date
+    var workTimeSeconds: Int = 0      // 工作时间累计（秒）
+    var breakTimeSeconds: Int = 0     // 休息时间累计（秒）
+    
+    // 检查是否是今天的数据
+    func isToday() -> Bool {
+        return Calendar.current.isDateInToday(date)
+    }
+    
+    // 重置今日数据
+    mutating func reset() {
+        workTimeSeconds = 0
+        breakTimeSeconds = 0
+        date = Date()
+    }
+}
+
+// 历史统计数据结构
+struct HistoricalTimeStats: Codable {
+    // 每个时间块ID对应的总使用时间（秒）
+    var timeBlockUsage: [UUID: Int] = [:]
+    
+    // 更新时间块使用时间
+    mutating func updateUsage(blockId: UUID, seconds: Int) {
+        let currentValue = timeBlockUsage[blockId] ?? 0
+        timeBlockUsage[blockId] = currentValue + seconds
+    }
+    
+    // 获取总计时间（秒）
+    var totalSeconds: Int {
+        return timeBlockUsage.values.reduce(0, +)
+    }
+    
+    // 计算每个时间块的使用占比
+    func calculatePercentages() -> [UUID: Double] {
+        let total = Double(totalSeconds)
+        guard total > 0 else { return [:] }
+        
+        var percentages: [UUID: Double] = [:]
+        for (id, seconds) in timeBlockUsage {
+            percentages[id] = Double(seconds) / total
+        }
+        return percentages
     }
 }

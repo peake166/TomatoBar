@@ -1,308 +1,629 @@
-# TomatoBar 时间统计功能规划
+# TomatoBar 时间统计功能开发规划
 
 ## 需求概述
 
-在 TomatoBar 应用中添加时间统计功能，用于展示用户的时间使用情况，主要包括：
+在 TomatoBar 应用中优化并添加时间统计功能，主要包括两部分：
 
-1. **本周时间柱状图**：展示周一至周日每天的时间使用情况
-2. **历史时间饼图**：展示所有时间块的历史累计时间占比
-3. **数据本地存储**：数据精简化，避免占用过多内存
+1. **今日目标工作时间统计**：在时间块视图中显示今日工作目标总时间
+2. **时间统计栏目**：添加新的时间统计标签页，包含今日统计和历史统计
 
-## 实现目标
+## 功能详细说明
 
-### 1. 数据模型设计
+### 1. 今日目标工作时间
 
-- 设计每日时间使用记录的数据结构
-- 设计历史时间统计的数据结构
-- 确定数据存储和更新策略
+- 在时间块视图顶部显示今日工作目标总时间
+- 该时间根据所有"工作"标签时间块的时长自动汇总计算
+- 休息类型的时间块不计入工作目标总时间
+- 工作目标时间不随时间块倒计时而变化，仅反映计划时间
+- 用户不能直接编辑或删除此总时间，它完全由时间块配置决定
 
-### 2. 统计逻辑实现
+### 2. 时间统计栏目
 
-- 实现时间累计的计算逻辑
-- 实现按周、按类型的统计逻辑
-- 实现数据重置功能
+#### 2.1 今日时间统计
 
-### 3. 用户界面开发
+- 使用条状图显示今日已完成的工作时间和休息时间
+- 工作时间统计条最长显示14小时
+- 休息时间统计条最长显示10小时
+- 根据用户实际使用的时间块计时来累计时间，按进度条方式直观展示
+- 当用户点击"刷新时间"按钮时，今日统计数据会重置为零
 
-- 设计并实现柱状图视图
-- 设计并实现饼图视图
-- 将统计视图整合到现有应用界面
+#### 2.2 历史时间统计
 
-### 4. 数据持久化
+- 使用饼图展示自软件安装以来所有时间块使用占比
+- 数据持久化存储在本地，轻量化处理避免占用过多内存
+- 历史数据会持续累积更新，不会因任何操作被重置
 
-- 实现数据的本地存储
-- 确保数据的定期保存
-- 优化数据存储，避免过度占用内存
+## 开发计划
 
-## 实现步骤
+### 第一阶段 - 数据模型与基础逻辑（5天）
 
-### 1. 数据模型设计
+1. **创建基础数据结构（1天）**
+   ```swift
+   // 今日工作目标时间计算
+   extension TimeBlockManager {
+       // 计算今日工作目标总时间（分钟）
+       var todayWorkTargetMinutes: Int {
+           return timeBlocks
+               .filter { $0.type == .work }
+               .reduce(0) { $0 + $1.duration }
+       }
+       
+       // 格式化显示（小时:分钟）
+       var formattedTodayWorkTarget: String {
+           let hours = todayWorkTargetMinutes / 60
+           let minutes = todayWorkTargetMinutes % 60
+           return String(format: "%d:%02d", hours, minutes)
+       }
+   }
+   
+   // 今日统计数据结构
+   struct DailyTimeStats: Codable {
+       var date: Date
+       var workTimeSeconds: Int = 0      // 工作时间累计（秒）
+       var breakTimeSeconds: Int = 0     // 休息时间累计（秒）
+       
+       // 检查是否是今天的数据
+       func isToday() -> Bool {
+           return Calendar.current.isDateInToday(date)
+       }
+       
+       // 重置今日数据
+       mutating func reset() {
+           workTimeSeconds = 0
+           breakTimeSeconds = 0
+           date = Date()
+       }
+   }
+   
+   // 历史统计数据结构
+   struct HistoricalTimeStats: Codable {
+       // 每个时间块ID对应的总使用时间（秒）
+       var timeBlockUsage: [UUID: Int] = [:]
+       
+       // 更新时间块使用时间
+       mutating func updateUsage(blockId: UUID, seconds: Int) {
+           let currentValue = timeBlockUsage[blockId] ?? 0
+           timeBlockUsage[blockId] = currentValue + seconds
+       }
+       
+       // 获取总计时间（秒）
+       var totalSeconds: Int {
+           return timeBlockUsage.values.reduce(0, +)
+       }
+       
+       // 计算每个时间块的使用占比
+       func calculatePercentages() -> [UUID: Double] {
+           let total = Double(totalSeconds)
+           guard total > 0 else { return [:] }
+           
+           var percentages: [UUID: Double] = [:]
+           for (id, seconds) in timeBlockUsage {
+               percentages[id] = Double(seconds) / total
+           }
+           return percentages
+       }
+   }
 
-#### 新增数据结构
+   // 在TimeBlockManager中添加相关属性
+   class TimeBlockManager: ObservableObject {
+       // 现有属性...
+       
+       // 今日统计数据
+       @Published var dailyStats: DailyTimeStats = DailyTimeStats(date: Date())
+       
+       // 历史统计数据
+       @Published var historicalStats: HistoricalTimeStats = HistoricalTimeStats()
+       
+       // 文件URL
+       private var dailyStatsFileURL: URL? {
+           // 返回今日统计数据文件URL
+       }
+       
+       private var historicalStatsFileURL: URL? {
+           // 返回历史统计数据文件URL
+       }
+   }
+   ```
 
-```swift
-// 日统计数据
-struct DailyTimeStats: Codable, Identifiable {
-    var id: String { date.formatted(date: .abbreviated, time: .omitted) }
-    let date: Date
-    var timeBlockUsage: [UUID: TimeInterval] // 每个时间块当天的使用时间
-}
+2. **实现基础统计逻辑（2天）**
+   ```swift
+   // 在现有的updateTime方法中添加统计逻辑
+   func updateTime() {
+       if currentState == .active {
+           // 现有的逻辑...
+           remainingSeconds -= 1
+           
+           // 添加统计逻辑
+           if let currentBlock = currentTimeBlock {
+               // 检查并确保dailyStats是今天的数据
+               if !dailyStats.isToday() {
+                   dailyStats.reset()
+               }
+               
+               // 更新今日统计
+               if currentBlock.type == .work {
+                   dailyStats.workTimeSeconds += 1
+               } else {
+                   dailyStats.breakTimeSeconds += 1
+               }
+               
+               // 更新历史统计
+               historicalStats.updateUsage(blockId: currentBlock.id, seconds: 1)
+               
+               // 自动保存数据（考虑节流以避免频繁IO）
+               if remainingSeconds % 60 == 0 { // 每分钟保存一次
+                   saveTimeStats()
+               }
+           }
+       }
+       
+       // 其余逻辑...
+   }
+   
+   // 在刷新时间的方法中添加统计重置
+   func refreshAllTimeBlocks() {
+       // 现有逻辑...
+       
+       // 重置今日统计
+       dailyStats.reset()
+       
+       // 保存更新后的统计数据
+       saveTimeStats()
+   }
+   ```
 
-// 周统计数据
-struct WeeklyTimeStats: Codable {
-    var dailyStats: [DailyTimeStats] // 一周七天的数据
-    var startDate: Date // 记录当前周的开始日期
-}
+3. **实现数据持久化（2天）**
+   ```swift
+   // 保存统计数据
+   func saveTimeStats() {
+       do {
+           let encoder = JSONEncoder()
+           
+           // 保存今日统计
+           if let url = dailyStatsFileURL {
+               let dailyData = try encoder.encode(dailyStats)
+               try dailyData.write(to: url)
+           }
+           
+           // 保存历史统计
+           if let url = historicalStatsFileURL {
+               let historicalData = try encoder.encode(historicalStats)
+               try historicalData.write(to: url)
+           }
+       } catch {
+           print("保存统计数据失败: \(error)")
+       }
+   }
+   
+   // 加载统计数据
+   func loadTimeStats() {
+       let decoder = JSONDecoder()
+       
+       // 加载今日统计
+       if let url = dailyStatsFileURL,
+          let data = try? Data(contentsOf: url),
+          let loadedStats = try? decoder.decode(DailyTimeStats.self, from: data) {
+           dailyStats = loadedStats
+           // 如果不是今天的数据，重置
+           if !dailyStats.isToday() {
+               dailyStats.reset()
+           }
+       }
+       
+       // 加载历史统计
+       if let url = historicalStatsFileURL,
+          let data = try? Data(contentsOf: url),
+          let loadedStats = try? decoder.decode(HistoricalTimeStats.self, from: data) {
+           historicalStats = loadedStats
+       }
+   }
+   ```
 
-// 历史统计数据
-struct HistoricalTimeStats: Codable {
-    var totalTimeBlockUsage: [UUID: TimeInterval] // 每个时间块的总使用时间
-}
-```
+### 第二阶段 - 用户界面开发（7天）
 
-#### 在TimeBlockManager中添加统计属性
+1. **设计并实现基础UI组件（4天）**
+   ```swift
+   // 今日目标工作时间组件
+   struct TodayWorkTargetView: View {
+       @ObservedObject var timeBlockManager: TimeBlockManager
+       
+       var body: some View {
+           HStack {
+               Image(systemName: "target")
+                   .foregroundColor(.blue)
+               
+               Text("今日工作目标")
+                   .font(.subheadline)
+                   .foregroundColor(.secondary)
+               
+               Spacer()
+               
+               Text(timeBlockManager.formattedTodayWorkTarget)
+                   .font(.headline)
+                   .foregroundColor(.blue)
+           }
+           .padding(.horizontal)
+           .padding(.vertical, 8)
+           .background(Color.blue.opacity(0.1))
+           .cornerRadius(8)
+           .padding(.horizontal)
+           .padding(.top, 8)
+       }
+   }
+   
+   // 进度条组件（条形图）
+   struct TimeBarView: View {
+       let title: String
+       let currentSeconds: Int
+       let maxHours: Int
+       let color: Color
+       
+       private var maxSeconds: Int {
+           return maxHours * 3600
+       }
+       
+       private var progress: Double {
+           let progress = Double(currentSeconds) / Double(maxSeconds)
+           return min(progress, 1.0) // 确保不超过1.0
+       }
+       
+       private var formattedTime: String {
+           let hours = currentSeconds / 3600
+           let minutes = (currentSeconds % 3600) / 60
+           
+           if hours > 0 {
+               return "\(hours):\(String(format: "%02d", minutes))"
+           } else {
+               return "\(minutes)分钟"
+           }
+       }
+       
+       var body: some View {
+           VStack(alignment: .leading, spacing: 4) {
+               HStack {
+                   Text(title)
+                       .font(.subheadline)
+                       .foregroundColor(.secondary)
+                   
+                   Spacer()
+                   
+                   Text(formattedTime)
+                       .font(.subheadline)
+                       .foregroundColor(color)
+               }
+               
+               // 进度条
+               GeometryReader { geo in
+                   ZStack(alignment: .leading) {
+                       // 背景
+                       RoundedRectangle(cornerRadius: 4)
+                           .fill(Color.secondary.opacity(0.2))
+                           .frame(height: 8)
+                       
+                       // 进度
+                       RoundedRectangle(cornerRadius: 4)
+                           .fill(color)
+                           .frame(width: geo.size.width * progress, height: 8)
+                   }
+               }
+               .frame(height: 8)
+               
+               // 最大时间标注
+               HStack {
+                   Spacer()
+                   Text("最大\(maxHours)小时")
+                       .font(.caption2)
+                       .foregroundColor(.secondary)
+               }
+           }
+       }
+   }
+   
+   // 饼图数据模型
+   struct PieSliceData: Identifiable {
+       var id: UUID
+       var value: Double
+       var color: Color
+   }
+   
+   // 饼图组件
+   struct PieChartView: View {
+       let data: [PieSliceData]
+       let timeBlocks: [TimeBlock]
+       
+       var body: some View {
+           GeometryReader { geo in
+               ZStack {
+                   ForEach(0..<data.count, id: \.self) { i in
+                       PieSlice(
+                           startAngle: startAngle(index: i),
+                           endAngle: endAngle(index: i),
+                           color: data[i].color
+                       )
+                   }
+                   
+                   // 中心孔
+                   Circle()
+                       .fill(Color(.systemBackground))
+                       .frame(width: geo.size.width * 0.5, height: geo.size.height * 0.5)
+                   
+                   // 中心文字
+                   Text("\(Int(totalPercent * 100))%")
+                       .font(.title)
+                       .bold()
+               }
+           }
+           .aspectRatio(1, contentMode: .fit)
+       }
+       
+       private var totalPercent: Double {
+           data.reduce(0) { $0 + $1.value }
+       }
+       
+       private func startAngle(index: Int) -> Angle {
+           if index == 0 { return .degrees(0) }
+           
+           let sum = data[0..<index].reduce(0) { $0 + $1.value }
+           return .degrees(sum * 360)
+       }
+       
+       private func endAngle(index: Int) -> Angle {
+           let sum = data[0...index].reduce(0) { $0 + $1.value }
+           return .degrees(sum * 360)
+       }
+   }
+   
+   struct PieSlice: View {
+       var startAngle: Angle
+       var endAngle: Angle
+       var color: Color
+       
+       var body: some View {
+           Path { path in
+               path.move(to: CGPoint(x: 0.5, y: 0.5))
+               path.addArc(
+                   center: CGPoint(x: 0.5, y: 0.5),
+                   radius: 0.5,
+                   startAngle: startAngle,
+                   endAngle: endAngle,
+                   clockwise: false
+               )
+               path.closeSubpath()
+           }
+           .fill(color)
+           .aspectRatio(1, contentMode: .fit)
+       }
+   }
+   ```
 
-- 添加`currentWeekStats: WeeklyTimeStats`属性存储本周数据
-- 添加`historicalStats: HistoricalTimeStats`属性存储历史数据
+2. **实现统计视图（2天）**
+   ```swift
+   struct TimeStatsView: View {
+       @ObservedObject var timeBlockManager: TimeBlockManager
+       
+       var body: some View {
+           ScrollView {
+               VStack(spacing: 20) {
+                   // 今日统计区域
+                   todayStatsSection
+                   
+                   Divider()
+                   
+                   // 历史统计区域
+                   historicalStatsSection
+               }
+               .padding()
+           }
+       }
+       
+       // 今日统计部分
+       private var todayStatsSection: some View {
+           VStack(alignment: .leading, spacing: 12) {
+               Text("今日时间统计")
+                   .font(.headline)
+               
+               // 工作时间条形图
+               TimeBarView(
+                   title: "工作时间",
+                   currentSeconds: timeBlockManager.dailyStats.workTimeSeconds,
+                   maxHours: 14,
+                   color: .blue
+               )
+               
+               // 休息时间条形图
+               TimeBarView(
+                   title: "休息时间",
+                   currentSeconds: timeBlockManager.dailyStats.breakTimeSeconds,
+                   maxHours: 10,
+                   color: .green
+               )
+               
+               // 显示具体数值
+               HStack {
+                   Spacer()
+                   VStack(alignment: .trailing) {
+                       Text("工作: \(formatTime(timeBlockManager.dailyStats.workTimeSeconds))")
+                       Text("休息: \(formatTime(timeBlockManager.dailyStats.breakTimeSeconds))")
+                   }
+                   .font(.caption)
+                   .foregroundColor(.secondary)
+               }
+           }
+       }
+       
+       // 历史统计部分
+       private var historicalStatsSection: some View {
+           VStack(alignment: .leading, spacing: 12) {
+               Text("历史时间统计")
+                   .font(.headline)
+               
+               // 饼图
+               if timeBlockManager.historicalStats.totalSeconds > 0 {
+                   PieChartView(
+                       data: prepareChartData(),
+                       timeBlocks: timeBlockManager.timeBlocks
+                   )
+                   .frame(height: 200)
+                   
+                   // 图例
+                   ForEach(timeBlockManager.timeBlocks) { block in
+                       if let seconds = timeBlockManager.historicalStats.timeBlockUsage[block.id], seconds > 0 {
+                           HStack {
+                               Circle()
+                                   .fill(block.color.toColor())
+                                   .frame(width: 10, height: 10)
+                               
+                               Text(block.name)
+                               
+                               Spacer()
+                               
+                               Text(formatTime(seconds))
+                                   .foregroundColor(.secondary)
+                           }
+                           .font(.caption)
+                       }
+                   }
+               } else {
+                   Text("暂无历史数据")
+                       .foregroundColor(.secondary)
+                       .frame(maxWidth: .infinity, alignment: .center)
+                       .padding()
+               }
+           }
+       }
+       
+       // 准备饼图数据
+       private func prepareChartData() -> [PieSliceData] {
+           let percentages = timeBlockManager.historicalStats.calculatePercentages()
+           
+           return timeBlockManager.timeBlocks.compactMap { block in
+               guard let percent = percentages[block.id], percent > 0 else { return nil }
+               return PieSliceData(
+                   id: block.id,
+                   value: percent,
+                   color: block.color.toColor()
+               )
+           }
+       }
+       
+       // 格式化时间
+       private func formatTime(_ seconds: Int) -> String {
+           let hours = seconds / 3600
+           let minutes = (seconds % 3600) / 60
+           
+           if hours > 0 {
+               return "\(hours)小时\(minutes)分钟"
+           } else {
+               return "\(minutes)分钟"
+           }
+       }
+   }
+   ```
 
-### 2. 统计逻辑实现
+3. **整合到现有应用（1天）**
+   ```swift
+   // 更新主视图添加时间统计标签
+   struct TBPopoverView: View {
+       @State private var selectedTab: Int = 0
+       @ObservedObject var timer = TBTimer()
+       
+       var body: some View {
+           VStack {
+               // 顶部选项卡
+               Picker("", selection: $selectedTab) {
+                   Text("时间块").tag(0)
+                   Text("时间统计").tag(1)
+                   Text("设置").tag(2)
+               }
+               .pickerStyle(SegmentedPickerStyle())
+               .padding(.horizontal)
+               .padding(.top, 8)
+               
+               // 内容视图
+               Group {
+                   if selectedTab == 0 {
+                       TimeBlocksView(timer: timer)
+                   } else if selectedTab == 1 {
+                       TimeStatsView(timeBlockManager: timer.timeBlockManager)
+                   } else {
+                       SettingsView()
+                   }
+               }
+           }
+           .frame(width: 240)
+       }
+   }
+   
+   // 更新时间块视图添加工作目标时间
+   struct TimeBlocksView: View {
+       @ObservedObject var timer: TBTimer
+       
+       var body: some View {
+           VStack(spacing: 0) {
+               // 添加工作目标时间展示
+               TodayWorkTargetView(timeBlockManager: timer.timeBlockManager)
+               
+               // 现有的控制按钮行
+               HStack {
+                   // 刷新按钮
+                   Button {
+                       timer.refreshAllTimeBlocks()
+                   } label: {
+                       Image(systemName: "arrow.counterclockwise")
+                           .foregroundColor(.secondary)
+                   }
+                   .buttonStyle(.plain)
+                   .help("刷新所有时间")
+                   
+                   // 其他控制按钮...
+               }
+               .padding(.horizontal)
+               .padding(.vertical, 8)
+               
+               // 时间块列表
+               // 现有代码...
+           }
+       }
+   }
+   ```
 
-#### 时间累计逻辑
+### 第三阶段 - 测试与优化（3天）
 
-在计时器更新逻辑中添加时间统计：
+1. **全面功能测试（1天）**
+   - 测试今日工作目标时间计算
+   - 测试今日统计数据累计和重置
+   - 测试历史统计数据累计和持久化
 
-```swift
-// 伪代码示例
-func updateTime() {
-    if state == .active {
-        remainingSeconds -= 1
-        
-        // 更新今日统计
-        updateDailyStats(blockId: currentTimeBlock.id, seconds: 1)
-        
-        // 更新历史统计
-        updateHistoricalStats(blockId: currentTimeBlock.id, seconds: 1)
-    }
-    
-    // 原有代码继续执行...
-}
-```
+2. **性能优化（1天）**
+   - 优化数据处理逻辑，减少计算开销
+   - 优化数据存储策略，减少磁盘IO
+   - 优化图表渲染，提高展示效率
 
-#### 周数据管理
-
-实现检测新一周开始的逻辑和手动重置功能：
-
-```swift
-// 检查并更新周数据
-func checkAndUpdateWeek() {
-    let calendar = Calendar.current
-    let today = Date()
-    
-    // 检查是否需要开始新的一周
-    if let weekStart = currentWeekStats.startDate {
-        let components = calendar.dateComponents([.weekOfYear], from: weekStart, to: today)
-        if components.weekOfYear ?? 0 > 0 {
-            // 自动开始新的一周
-            startNewWeek()
-        }
-    } else {
-        // 首次运行，初始化周开始日期
-        initializeWeekStart()
-    }
-}
-
-// 手动重置周数据
-func resetWeekStats() {
-    startNewWeek()
-}
-```
-
-#### 数据聚合方法
-
-```swift
-// 获取本周每日数据
-func getDailyStatsForWeek() -> [DailyTimeStats] {
-    return currentWeekStats.dailyStats
-}
-
-// 获取时间块总使用时间
-func getTimeBlockTotalUsage() -> [UUID: TimeInterval] {
-    return historicalStats.totalTimeBlockUsage
-}
-```
-
-### 3. 用户界面开发
-
-#### 创建统计视图
-
-```swift
-struct TimeStatsView: View {
-    @ObservedObject var timeBlockManager: TimeBlockManager
-    
-    var body: some View {
-        VStack {
-            // 选项卡切换：周统计/历史统计
-            TabView {
-                WeeklyStatsView(weeklyStats: timeBlockManager.currentWeekStats)
-                    .tabItem { Text("本周统计") }
-                
-                HistoricalStatsView(historicalStats: timeBlockManager.historicalStats)
-                    .tabItem { Text("历史统计") }
-            }
-            
-            // 底部按钮
-            Button("重置本周数据") {
-                timeBlockManager.resetWeekStats()
-            }
-        }
-    }
-}
-```
-
-#### 柱状图视图实现
-
-使用SwiftUI创建柱状图，显示周一至周日的使用时间：
-
-```swift
-struct WeeklyStatsView: View {
-    let weeklyStats: WeeklyTimeStats
-    
-    var body: some View {
-        VStack {
-            Text("本周时间使用情况")
-                .font(.headline)
-            
-            HStack(alignment: .bottom, spacing: 12) {
-                // 为每天创建柱状图
-                ForEach(weeklyStats.dailyStats) { daily in
-                    DayBarView(dayStats: daily)
-                }
-            }
-            .padding()
-        }
-    }
-}
-```
-
-#### 饼图视图实现
-
-创建饼图展示历史使用时间分布：
-
-```swift
-struct HistoricalStatsView: View {
-    let historicalStats: HistoricalTimeStats
-    @ObservedObject var timeBlockManager: TimeBlockManager
-    
-    var body: some View {
-        VStack {
-            Text("历史时间分布")
-                .font(.headline)
-            
-            PieChartView(data: prepareChartData())
-                .frame(height: 200)
-            
-            // 显示总时间和分类明细
-            VStack(alignment: .leading) {
-                Text("总计时间: \(formatTotalTime())")
-                
-                ForEach(timeBlockManager.timeBlocks) { block in
-                    if let time = historicalStats.totalTimeBlockUsage[block.id] {
-                        HStack {
-                            Circle()
-                                .fill(colorForBlock(block))
-                                .frame(width: 10, height: 10)
-                            Text("\(block.name): \(formatTime(time))")
-                        }
-                    }
-                }
-            }
-            .padding()
-        }
-    }
-}
-```
-
-### 4. 数据持久化
-
-#### 扩展现有存储机制
-
-```swift
-// 保存统计数据
-func saveTimeStats() {
-    do {
-        let encoder = JSONEncoder()
-        let weeklyData = try encoder.encode(currentWeekStats)
-        let historicalData = try encoder.encode(historicalStats)
-        
-        // 保存到文件
-        try weeklyData.write(to: weeklyStatsURL)
-        try historicalData.write(to: historicalStatsURL)
-    } catch {
-        print("保存统计数据失败: \(error)")
-    }
-}
-
-// 加载统计数据
-func loadTimeStats() {
-    // 加载周统计
-    if let weeklyData = try? Data(contentsOf: weeklyStatsURL),
-       let loadedWeekStats = try? JSONDecoder().decode(WeeklyTimeStats.self, from: weeklyData) {
-        currentWeekStats = loadedWeekStats
-    }
-    
-    // 加载历史统计
-    if let historicalData = try? Data(contentsOf: historicalStatsURL),
-       let loadedHistoricalStats = try? JSONDecoder().decode(HistoricalTimeStats.self, from: historicalData) {
-        historicalStats = loadedHistoricalStats
-    }
-}
-```
-
-#### 数据优化策略
-
-- 周统计数据仅保留最近一周
-- 历史数据考虑按月合并，减少数据量
-- 定期清理过旧的详细数据，只保留聚合结果
-
-#### 自动保存机制
-
-- 应用退出前保存统计数据
-- 时间块完成或状态变化时保存数据
-- 定期自动保存，防止数据丢失
-
-## 实施阶段
-
-1. **第一阶段 - 数据模型与基础逻辑**
-   - 实现数据结构和存储机制
-   - 实现基本的时间累计逻辑
-   - 编写数据持久化代码
-
-2. **第二阶段 - 用户界面开发**
-   - 实现柱状图和饼图视图
-   - 将统计视图整合到现有界面
-   - 实现数据刷新和重置功能
-
-3. **第三阶段 - 测试与优化**
-   - 全面测试功能
-   - 优化数据存储和处理性能
-   - 完善异常处理和边缘情况
+3. **修复问题与收尾（1天）**
+   - 修复发现的任何问题
+   - 优化异常处理和边缘情况
+   - 最终代码审查和整理
 
 ## 注意事项
 
-1. **日期处理**
-   - 需要处理时区、周起始日等日期相关问题
-   - 处理跨天计时的情况
+1. **数据准确性**
+   - 处理应用重启后的数据恢复
+   - 确保计时暂停和恢复不会影响统计
+   - 考虑系统休眠/唤醒对计时的影响
 
-2. **数据准确性**
-   - 确保应用崩溃时不丢失统计数据
-   - 考虑用户调整系统时间的情况
+2. **性能优化**
+   - 避免频繁的文件IO操作
+   - 使用节流机制减少不必要的更新
+   - 历史数据可考虑周期性聚合以减少存储量
 
-3. **UI适配**
-   - 确保图表在不同屏幕尺寸下的适配
-   - 处理大量数据时的图表清晰度
+3. **用户体验**
+   - 确保统计视图加载速度快
+   - 提供清晰的数据可视化效果
+   - 保持界面简洁，不过度占用空间
 
-4. **存储空间**
-   - 监控数据文件大小，避免过度增长
-   - 实现数据压缩或清理机制
+4. **日期处理**
+   - 正确处理跨天使用的情况
+   - 考虑时区变化对"今天"判断的影响
+   - 确保日期比较逻辑准确
 
 
